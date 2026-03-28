@@ -121,6 +121,157 @@ function Skeleton({ w = '100%', h = 16 }: { w?: string | number; h?: number }) {
   )
 }
 
+/* ─── PRICE CHART ─────────────────────────────────────────────────────────── */
+
+const PERIODS = ['1W', '1M', '3M', '6M', '1Y'] as const
+type Period = typeof PERIODS[number]
+
+interface Candle { t: number; c: number; h: number; l: number }
+
+function PriceChart({ symbol }: { symbol: string }) {
+  const [period, setPeriod] = useState<Period>('1M')
+  const [candles, setCandles] = useState<Candle[]>([])
+  const [periodReturn, setPeriodReturn] = useState<number | null>(null)
+  const [chartLoading, setChartLoading] = useState(true)
+  const [hovered, setHovered] = useState<{ x: number; y: number; candle: Candle } | null>(null)
+
+  useEffect(() => {
+    setChartLoading(true)
+    setCandles([])
+    fetch(`/api/ticker/${symbol}/candles?period=${period}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d?.candles) { setCandles(d.candles); setPeriodReturn(d.periodReturn) }
+        setChartLoading(false)
+      })
+      .catch(() => setChartLoading(false))
+  }, [symbol, period])
+
+  const W = 800, H = 160, PAD = { t: 12, r: 8, b: 28, l: 8 }
+  const up = (periodReturn ?? 0) >= 0
+  const color = up ? '#3DD68C' : '#F06070'
+
+  // Build SVG path from candle close prices
+  const pts: [number, number][] = candles.length > 1 ? (() => {
+    const closes = candles.map(c => c.c)
+    const min = Math.min(...closes), max = Math.max(...closes), range = max - min || 1
+    return closes.map((v, i) => [
+      PAD.l + (i / (closes.length - 1)) * (W - PAD.l - PAD.r),
+      PAD.t + (1 - (v - min) / range) * (H - PAD.t - PAD.b),
+    ]) as [number, number][]
+  })() : []
+
+  const line = pts.map(([x, y], i) => (i === 0 ? `M ${x} ${y}` : `L ${x} ${y}`)).join(' ')
+  const area = pts.length ? `${line} L ${pts[pts.length-1][0]} ${H - PAD.b} L ${pts[0][0]} ${H - PAD.b} Z` : ''
+
+  // X-axis labels (4 evenly spaced dates)
+  const xLabels = candles.length > 4
+    ? [0, Math.floor(candles.length/3), Math.floor(2*candles.length/3), candles.length-1].map(i => ({
+        x: PAD.l + (i / (candles.length - 1)) * (W - PAD.l - PAD.r),
+        label: new Date(candles[i].t * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      }))
+    : []
+
+  function handleMouseMove(e: React.MouseEvent<SVGSVGElement>) {
+    if (!candles.length || !pts.length) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    const mx = ((e.clientX - rect.left) / rect.width) * W
+    // find nearest point
+    const idx = pts.reduce((best, [x], i) => Math.abs(x - mx) < Math.abs(pts[best][0] - mx) ? i : best, 0)
+    setHovered({ x: pts[idx][0], y: pts[idx][1], candle: candles[idx] })
+  }
+
+  return (
+    <div className="card" style={{ padding: '20px 24px' }}>
+      {/* Header row */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Price</span>
+          {periodReturn != null && (
+            <span style={{ fontSize: 13, fontWeight: 600, color }}>
+              {up ? '+' : ''}{periodReturn.toFixed(2)}% ({period})
+            </span>
+          )}
+          {hovered && (
+            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+              ${hovered.candle.c.toFixed(2)} · {new Date(hovered.candle.t * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+            </span>
+          )}
+        </div>
+        {/* Period toggle */}
+        <div style={{ display: 'flex', gap: 2, background: 'var(--bg-elevated)', borderRadius: 7, padding: 3 }}>
+          {PERIODS.map(p => (
+            <button
+              key={p}
+              onClick={() => setPeriod(p)}
+              style={{
+                padding: '4px 10px', borderRadius: 5, fontSize: 11.5, fontWeight: 500,
+                border: 'none', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif",
+                background: period === p ? 'var(--bg-surface)' : 'transparent',
+                color: period === p ? 'var(--gold)' : 'var(--text-muted)',
+                transition: 'all 0.15s',
+              }}
+            >{p}</button>
+          ))}
+        </div>
+      </div>
+
+      {/* Chart */}
+      {chartLoading ? (
+        <div style={{ height: H, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ width: 18, height: 18, border: '2px solid var(--border-bright)', borderTopColor: 'var(--gold)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+        </div>
+      ) : candles.length < 2 ? (
+        <div style={{ height: H, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>No chart data for this period</span>
+        </div>
+      ) : (
+        <svg
+          viewBox={`0 0 ${W} ${H}`}
+          style={{ width: '100%', height: H, cursor: 'crosshair', overflow: 'visible' }}
+          onMouseMove={handleMouseMove}
+          onMouseLeave={() => setHovered(null)}
+        >
+          <defs>
+            <linearGradient id={`chart-g-${symbol}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={color} stopOpacity="0.18" />
+              <stop offset="100%" stopColor={color} stopOpacity="0.01" />
+            </linearGradient>
+          </defs>
+
+          {/* Horizontal grid lines */}
+          {[0.25, 0.5, 0.75].map(f => (
+            <line key={f}
+              x1={PAD.l} y1={PAD.t + f * (H - PAD.t - PAD.b)}
+              x2={W - PAD.r} y2={PAD.t + f * (H - PAD.t - PAD.b)}
+              stroke="var(--border)" strokeWidth="1" strokeDasharray="3 4"
+            />
+          ))}
+
+          {/* Area fill */}
+          <path d={area} fill={`url(#chart-g-${symbol})`} />
+
+          {/* Line */}
+          <path d={line} fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+
+          {/* X-axis labels */}
+          {xLabels.map(({ x, label }) => (
+            <text key={label} x={x} y={H - 4} textAnchor="middle" fill="var(--text-muted)" fontSize="9.5" fontFamily="'DM Sans', sans-serif">{label}</text>
+          ))}
+
+          {/* Hover crosshair */}
+          {hovered && (
+            <>
+              <line x1={hovered.x} y1={PAD.t} x2={hovered.x} y2={H - PAD.b} stroke="var(--border-bright)" strokeWidth="1" strokeDasharray="3 3" />
+              <circle cx={hovered.x} cy={hovered.y} r="4" fill={color} stroke="var(--bg-surface)" strokeWidth="2" />
+            </>
+          )}
+        </svg>
+      )}
+    </div>
+  )
+}
+
 /* ─── METRIC CARD ─────────────────────────────────────────────────────────── */
 
 function MetricCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
@@ -156,7 +307,12 @@ export default function TickerPage() {
   const [data, setData] = useState<TickerData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [tab, setTab] = useState<'overview' | 'financials' | 'news'>('overview')
+  const [tab, setTab] = useState<'overview' | 'financials' | 'news' | 'analysis'>('overview')
+
+  // Analysis tab state
+  const [analysis, setAnalysis] = useState<Record<string, unknown> | null>(null)
+  const [analysisLoading, setAnalysisLoading] = useState(false)
+  const [analysisError, setAnalysisError] = useState('')
 
   useEffect(() => {
     if (!symbol) return
@@ -170,6 +326,19 @@ export default function TickerPage() {
       .then(d => { setData(d); setLoading(false) })
       .catch(e => { setError(e.message); setLoading(false) })
   }, [symbol])
+
+  useEffect(() => {
+    if (tab !== 'analysis' || analysis || analysisLoading) return
+    setAnalysisLoading(true)
+    setAnalysisError('')
+    fetch(`/api/ticker/${symbol}/analysis`)
+      .then(r => {
+        if (!r.ok) throw new Error('Analysis unavailable')
+        return r.json()
+      })
+      .then(d => { setAnalysis(d.analysis); setAnalysisLoading(false) })
+      .catch(e => { setAnalysisError(e.message); setAnalysisLoading(false) })
+  }, [tab, symbol, analysis, analysisLoading])
 
   const up = (data?.priceChangePct ?? 0) >= 0
 
@@ -245,14 +414,14 @@ export default function TickerPage() {
           {/* Tabs */}
           {!loading && !error && (
             <div className="tab-bar" style={{ display: 'inline-flex', marginBottom: -1 }}>
-              {(['overview', 'financials', 'news'] as const).map(t => (
+              {(['overview', 'financials', 'news', 'analysis'] as const).map(t => (
                 <button
                   key={t}
                   className={`tab${tab === t ? ' active' : ''}`}
                   onClick={() => setTab(t)}
                   style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", padding: '8px 20px', textTransform: 'capitalize' }}
                 >
-                  {t}
+                  {t === 'analysis' ? '✦ Analysis' : t}
                 </button>
               ))}
             </div>
@@ -265,11 +434,18 @@ export default function TickerPage() {
           {/* Loading skeleton */}
           {loading && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <Skeleton h={220} />
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
                 {[...Array(4)].map((_, i) => <Skeleton key={i} h={80} />)}
               </div>
-              <Skeleton h={120} />
               <Skeleton h={200} />
+            </div>
+          )}
+
+          {/* Price chart — always visible once loaded */}
+          {!loading && !error && data && (
+            <div style={{ marginBottom: 24 }}>
+              <PriceChart symbol={symbol} />
             </div>
           )}
 
@@ -408,8 +584,128 @@ export default function TickerPage() {
               ))}
             </div>
           )}
+
+          {/* ── ANALYSIS TAB ── */}
+          {!loading && !error && data && tab === 'analysis' && (
+            <div className="animate-fade-up" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+              {/* Loading */}
+              {analysisLoading && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  <div className="card" style={{ padding: '28px', display: 'flex', alignItems: 'center', gap: 14 }}>
+                    <div style={{ width: 20, height: 20, border: '2px solid var(--gold-dim)', borderTopColor: 'var(--gold)', borderRadius: '50%', animation: 'spin 0.8s linear infinite', flexShrink: 0 }} />
+                    <div>
+                      <div style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 500 }}>Analysing {data.name}…</div>
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 3 }}>Reading SEC filing, financial metrics, and recent news</div>
+                    </div>
+                  </div>
+                  {[80, 60, 90].map((w, i) => <Skeleton key={i} w={`${w}%`} h={18} />)}
+                </div>
+              )}
+
+              {/* Error */}
+              {!analysisLoading && analysisError && (
+                <div className="card" style={{ padding: '28px', textAlign: 'center' }}>
+                  <div style={{ fontSize: 13, color: 'var(--red)', marginBottom: 8 }}>Analysis failed</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{analysisError}</div>
+                </div>
+              )}
+
+              {/* Analysis content */}
+              {!analysisLoading && !analysisError && analysis && (() => {
+                const a = analysis as {
+                  moat: string; moatReasoning: string
+                  bullThesis: string[]; bearThesis: string[]; keyRisks: string[]
+                  managementSignals: string; verdict: string; verdictReasoning: string; qualityScore: number
+                }
+                const verdictColor = a.verdict?.includes('Buy') ? 'var(--green)' : a.verdict?.includes('Sell') ? 'var(--red)' : 'var(--gold)'
+                const moatColor = a.moat === 'Wide' ? 'var(--green)' : a.moat === 'Narrow' ? 'var(--gold)' : 'var(--text-muted)'
+
+                return (
+                  <>
+                    {/* Verdict + Quality header */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                      <div className="card" style={{ padding: '22px 24px' }}>
+                        <div style={{ fontSize: 10.5, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 10 }}>AI Verdict</div>
+                        <div style={{ fontSize: 26, fontWeight: 700, color: verdictColor, marginBottom: 8 }}>{a.verdict}</div>
+                        <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.6 }}>{a.verdictReasoning}</div>
+                      </div>
+                      <div className="card" style={{ padding: '22px 24px' }}>
+                        <div style={{ fontSize: 10.5, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 10 }}>Competitive Moat</div>
+                        <div style={{ fontSize: 26, fontWeight: 700, color: moatColor, marginBottom: 8 }}>{a.moat}</div>
+                        <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.6 }}>{a.moatReasoning}</div>
+                      </div>
+                    </div>
+
+                    {/* Quality score */}
+                    <div className="card" style={{ padding: '20px 24px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                        <span style={{ fontSize: 10.5, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Business Quality Score</span>
+                        <span style={{ fontSize: 18, fontWeight: 700, color: 'var(--gold)' }}>{a.qualityScore}<span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 400 }}> / 10</span></span>
+                      </div>
+                      <div style={{ height: 6, background: 'var(--bg-elevated)', borderRadius: 100, overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${(a.qualityScore / 10) * 100}%`, background: 'linear-gradient(90deg, var(--gold-bright), var(--gold))', borderRadius: 100, transition: 'width 0.6s cubic-bezier(0.16,1,0.3,1)' }} />
+                      </div>
+                    </div>
+
+                    {/* Bull / Bear */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                      <div className="card" style={{ padding: '22px 24px' }}>
+                        <div style={{ fontSize: 10.5, color: 'var(--green)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 14, fontWeight: 600 }}>▲ Bull Thesis</div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                          {a.bullThesis?.map((pt, i) => (
+                            <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                              <span style={{ color: 'var(--green)', fontSize: 12, marginTop: 2, flexShrink: 0 }}>✓</span>
+                              <span style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.55 }}>{pt}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="card" style={{ padding: '22px 24px' }}>
+                        <div style={{ fontSize: 10.5, color: 'var(--red)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 14, fontWeight: 600 }}>▼ Bear Thesis</div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                          {a.bearThesis?.map((pt, i) => (
+                            <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                              <span style={{ color: 'var(--red)', fontSize: 12, marginTop: 2, flexShrink: 0 }}>✗</span>
+                              <span style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.55 }}>{pt}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Key Risks */}
+                    <div className="card" style={{ padding: '22px 24px' }}>
+                      <div style={{ fontSize: 10.5, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 14 }}>Key Risks</div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        {a.keyRisks?.map((r, i) => (
+                          <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', paddingBottom: 10, borderBottom: i < a.keyRisks.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                            <span style={{ color: 'var(--gold-dim)', fontSize: 11, marginTop: 2, flexShrink: 0 }}>⚠</span>
+                            <span style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.55 }}>{r}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Management */}
+                    <div className="card" style={{ padding: '22px 24px' }}>
+                      <div style={{ fontSize: 10.5, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 10 }}>Management & Capital Allocation</div>
+                      <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.7 }}>{a.managementSignals}</div>
+                    </div>
+
+                    <div style={{ padding: '12px 16px', background: 'var(--bg-elevated)', borderRadius: 8, border: '1px solid var(--border)' }}>
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                        ✦ AI analysis generated by GPT-5.4-mini using SEC filings, financial metrics, and recent news. Not financial advice.
+                      </span>
+                    </div>
+                  </>
+                )
+              })()}
+            </div>
+          )}
         </main>
       </div>
+      <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
     </div>
   )
 }
