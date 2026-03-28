@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
@@ -78,16 +78,28 @@ function Sidebar() {
 
 /* ─── TOP BAR ─────────────────────────────────────────────────────────────── */
 
-const INDICES = [
-  { label: 'S&P 500',  val: '5,254.35', chg: '+0.43%', up: true  },
-  { label: 'NASDAQ',   val: '16,427.1', chg: '+0.71%', up: true  },
-  { label: '10Y UST',  val: '4.32%',    chg: '-0.04',  up: false },
+const FALLBACK_INDICES = [
+  { label: 'S&P 500', val: '—', chg: '—', up: true },
+  { label: 'NASDAQ',  val: '—', chg: '—', up: true },
+  { label: '10Y UST', val: '—', chg: '—', up: true },
 ]
+
+type IndexItem = { label: string; val: string; chg: string; up: boolean }
+type SearchResult = { symbol: string; description: string }
 
 function TopBar() {
   const router = useRouter()
   const [displayName, setDisplayName] = useState('')
   const [initial, setInitial] = useState('·')
+  const [indices, setIndices] = useState<IndexItem[]>(FALLBACK_INDICES)
+
+  // Search state
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState<SearchResult[]>([])
+  const [searching, setSearching] = useState(false)
+  const [open, setOpen] = useState(false)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const searchWrapRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const supabase = createClient()
@@ -98,7 +110,54 @@ function TopBar() {
       setDisplayName(name)
       setInitial(name[0].toUpperCase())
     })
+
+    async function loadMarket() {
+      try {
+        const res = await fetch('/api/market')
+        if (res.ok) {
+          const data = await res.json()
+          if (Array.isArray(data) && data.length > 0) setIndices(data)
+        }
+      } catch {}
+    }
+    loadMarket()
+    const id = setInterval(loadMarket, 60_000)
+
+    // Close dropdown on outside click
+    function onClickOutside(e: MouseEvent) {
+      if (searchWrapRef.current && !searchWrapRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onClickOutside)
+    return () => { clearInterval(id); document.removeEventListener('mousedown', onClickOutside) }
   }, [])
+
+  function handleQueryChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const val = e.target.value
+    setQuery(val)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    if (!val.trim()) { setResults([]); setOpen(false); return }
+    debounceRef.current = setTimeout(async () => {
+      setSearching(true)
+      try {
+        const res = await fetch(`/api/ticker/search?q=${encodeURIComponent(val)}`)
+        if (res.ok) {
+          const data = await res.json()
+          setResults(data)
+          setOpen(data.length > 0)
+        }
+      } catch {}
+      setSearching(false)
+    }, 300)
+  }
+
+  function handleSelect(symbol: string) {
+    setQuery('')
+    setResults([])
+    setOpen(false)
+    router.push(`/protected/ticker/${symbol}`)
+  }
 
   async function handleSignOut() {
     const supabase = createClient()
@@ -112,12 +171,50 @@ function TopBar() {
       display: 'flex', alignItems: 'center', padding: '0 28px', gap: 20,
       background: 'var(--bg-surface)',
     }}>
-      <div style={{ flex: 1, position: 'relative' }}>
-        <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', fontSize: 15, pointerEvents: 'none' }}>⌕</span>
-        <input className="input-dark" style={{ paddingLeft: 36 }} placeholder="Search ticker, company, ISIN…" />
+      <div ref={searchWrapRef} style={{ flex: 1, position: 'relative' }}>
+        <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: searching ? 'var(--gold)' : 'var(--text-muted)', fontSize: 15, pointerEvents: 'none', transition: 'color 0.15s' }}>⌕</span>
+        <input
+          className="input-dark"
+          style={{ paddingLeft: 36 }}
+          placeholder="Search ticker or company…"
+          value={query}
+          onChange={handleQueryChange}
+          onKeyDown={e => { if (e.key === 'Escape') { setOpen(false); setQuery('') } }}
+          onFocus={() => { if (results.length > 0) setOpen(true) }}
+          autoComplete="off"
+        />
+        {open && results.length > 0 && (
+          <div style={{
+            position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0, zIndex: 100,
+            background: 'var(--bg-surface)', border: '1px solid var(--border-bright)',
+            borderRadius: 10, overflow: 'hidden',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+          }}>
+            {results.map((r, i) => (
+              <button
+                key={r.symbol}
+                type="button"
+                onClick={() => handleSelect(r.symbol)}
+                style={{
+                  width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '10px 16px', background: 'none', border: 'none', cursor: 'pointer',
+                  borderBottom: i < results.length - 1 ? '1px solid var(--border)' : 'none',
+                  fontFamily: "'DM Sans', sans-serif",
+                  transition: 'background 0.1s',
+                }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-elevated)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+              >
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--gold)', letterSpacing: '0.03em', minWidth: 56, textAlign: 'left' }}>{r.symbol}</span>
+                <span style={{ fontSize: 12.5, color: 'var(--text-secondary)', flex: 1, textAlign: 'left', paddingLeft: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.description}</span>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 8 }}>↗</span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       <div style={{ display: 'flex', gap: 28, alignItems: 'center' }}>
-        {INDICES.map(m => (
+        {indices.map((m: IndexItem) => (
           <div key={m.label} style={{ textAlign: 'right' }}>
             <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.05em' }}>{m.label}</div>
             <div style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 500, marginTop: 1 }}>
@@ -150,23 +247,42 @@ function TopBar() {
 
 /* ─── TICKER TAPE ──────────────────────────────────────────────────────────── */
 
-const TICKERS = [
-  { sym: 'AAPL',  price: '213.49', chg: '+1.34%', up: true  },
-  { sym: 'MSFT',  price: '415.23', chg: '+0.87%', up: true  },
-  { sym: 'GOOGL', price: '171.12', chg: '-0.22%', up: false },
-  { sym: 'AMZN',  price: '198.45', chg: '+2.11%', up: true  },
-  { sym: 'NVDA',  price: '876.34', chg: '+3.45%', up: true  },
-  { sym: 'BRK.B', price: '408.17', chg: '+0.33%', up: true  },
-  { sym: 'JPM',   price: '232.56', chg: '-0.55%', up: false },
-  { sym: 'V',     price: '283.21', chg: '+0.19%', up: true  },
-  { sym: 'JNJ',   price: '152.34', chg: '-1.02%', up: false },
-  { sym: 'MA',    price: '491.33', chg: '+1.12%', up: true  },
-  { sym: 'WMT',   price: '96.45',  chg: '+0.67%', up: true  },
-  { sym: 'DIS',   price: '89.21',  chg: '-0.34%', up: false },
+const FALLBACK_TICKERS = [
+  { sym: 'AAPL',  price: '—', chg: '—', up: true },
+  { sym: 'MSFT',  price: '—', chg: '—', up: true },
+  { sym: 'GOOGL', price: '—', chg: '—', up: true },
+  { sym: 'AMZN',  price: '—', chg: '—', up: true },
+  { sym: 'NVDA',  price: '—', chg: '—', up: true },
+  { sym: 'BRK.B', price: '—', chg: '—', up: true },
+  { sym: 'JPM',   price: '—', chg: '—', up: true },
+  { sym: 'V',     price: '—', chg: '—', up: true },
+  { sym: 'JNJ',   price: '—', chg: '—', up: true },
+  { sym: 'MA',    price: '—', chg: '—', up: true },
+  { sym: 'WMT',   price: '—', chg: '—', up: true },
+  { sym: 'DIS',   price: '—', chg: '—', up: true },
 ]
 
+type TickerItem = { sym: string; price: string; chg: string; up: boolean }
+
 function TickerTape() {
-  const items = [...TICKERS, ...TICKERS]
+  const [tickers, setTickers] = useState<TickerItem[]>(FALLBACK_TICKERS)
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const res = await fetch('/api/quotes')
+        if (res.ok) {
+          const data = await res.json()
+          if (Array.isArray(data) && data.length > 0) setTickers(data)
+        }
+      } catch {}
+    }
+    load()
+    const id = setInterval(load, 30_000)
+    return () => clearInterval(id)
+  }, [])
+
+  const items = [...tickers, ...tickers]
   return (
     <div className="ticker-wrap" style={{ height: 32, background: 'rgba(200,169,110,0.04)', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center' }}>
       <div className="ticker-inner animate-ticker">
