@@ -48,8 +48,8 @@ export async function GET(
     price: quote.c ?? null,
     priceChange: quote.d ?? null,
     priceChangePct: quote.dp ?? null,
-    high52: quote.h ?? null,
-    low52: quote.l ?? null,
+    dayHigh: quote.h ?? null,
+    dayLow: quote.l ?? null,
     open: quote.o ?? null,
     prevClose: quote.pc ?? null,
 

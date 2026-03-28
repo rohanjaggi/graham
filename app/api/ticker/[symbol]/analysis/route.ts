@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
+import { createClient } from '@/lib/supabase/server'
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 
@@ -62,6 +63,10 @@ export async function GET(
   const { symbol } = await params
   const sym = symbol.toUpperCase()
 
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
   const fKey = process.env.FINNHUB_API_KEY
   if (!fKey) return NextResponse.json({ error: 'Missing FINNHUB_API_KEY' }, { status: 500 })
   if (!process.env.OPENAI_API_KEY) return NextResponse.json({ error: 'Missing OPENAI_API_KEY' }, { status: 500 })
@@ -98,7 +103,7 @@ KEY METRICS:
 - ROE (TTM): ${metrics.roeTTM != null ? `${metrics.roeTTM.toFixed(1)}%` : '—'}
 - Revenue Growth YoY: ${metrics.revenueGrowthTTMYoy != null ? `${metrics.revenueGrowthTTMYoy.toFixed(1)}%` : '—'}
 - Gross Margin: ${metrics.grossMarginTTM != null ? `${metrics.grossMarginTTM.toFixed(1)}%` : '—'}
-- Debt/Equity: ${metrics.totalDebt_totalEquityAnnual ?? '—'}
+- Debt/Equity: ${metrics['totalDebt/totalEquityAnnual'] ?? '—'}
 - Dividend Yield: ${metrics.dividendYieldIndicatedAnnual != null ? `${metrics.dividendYieldIndicatedAnnual.toFixed(2)}%` : 'None'}
 - 52W Return: ${metrics['52WeekPriceReturnDaily'] != null ? `${metrics['52WeekPriceReturnDaily'].toFixed(1)}%` : '—'}
 
@@ -108,14 +113,16 @@ ${recentNews || 'No recent news available.'}
 ${secText ? `10-K EXCERPT (most recent annual report):\n${secText}` : '10-K: Not available.'}
 `.trim()
 
-  const completion = await openai.chat.completions.create({
-    model: 'gpt-5.4-mini',
-    response_format: { type: 'json_object' },
-    temperature: 0.3,
-    messages: [
-      {
-        role: 'system',
-        content: `You are a senior equity research analyst at a top-tier investment bank.
+  let completion
+  try {
+    completion = await openai.chat.completions.create({
+      model: 'gpt-5.4-mini',
+      response_format: { type: 'json_object' },
+      temperature: 0.3,
+      messages: [
+        {
+          role: 'system',
+          content: `You are a senior equity research analyst at a top-tier investment bank.
 Analyse the company data provided and return a JSON object with this exact shape:
 {
   "moat": "Wide" | "Narrow" | "None",
@@ -129,10 +136,14 @@ Analyse the company data provided and return a JSON object with this exact shape
   "qualityScore": <integer 1-10>
 }
 Be specific and data-driven. Reference actual metrics where relevant. Do not hallucinate facts not present in the data.`,
-      },
-      { role: 'user', content: contextBlock },
-    ],
-  })
+        },
+        { role: 'user', content: contextBlock },
+      ],
+    })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'OpenAI request failed'
+    return NextResponse.json({ error: msg }, { status: 502 })
+  }
 
   const raw = completion.choices[0].message.content ?? '{}'
   let analysis

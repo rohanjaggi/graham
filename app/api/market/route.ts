@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server'
 const MARKET_SYMBOLS = [
   { sym: 'SPY', label: 'S&P 500' },
   { sym: 'QQQ', label: 'NASDAQ'  },
-  { sym: 'TLT', label: '10Y UST' }, // 20yr treasury ETF, tracks closely
+  { sym: 'TLT', label: '20+Y UST' }, // 20yr treasury bond ETF
 ]
 
 export async function GET() {

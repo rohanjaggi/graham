@@ -17,8 +17,8 @@ interface TickerData {
   price: number | null
   priceChange: number | null
   priceChangePct: number | null
-  high52: number | null
-  low52: number | null
+  dayHigh: number | null
+  dayLow: number | null
   open: number | null
   prevClose: number | null
   pe: number | null
@@ -127,18 +127,20 @@ function Skeleton({ w = '100%', h = 16 }: { w?: string | number; h?: number }) {
 const PERIODS = ['1W', '1M', '3M', '6M', '1Y'] as const
 type Period = typeof PERIODS[number]
 
-interface Candle { t: number; c: number; h: number; l: number }
+interface Candle { t: number; o: number; h: number; l: number; c: number }
 
 function PriceChart({ symbol }: { symbol: string }) {
   const [period, setPeriod] = useState<Period>('1M')
+  const [chartType, setChartType] = useState<'line' | 'candle'>('candle')
   const [candles, setCandles] = useState<Candle[]>([])
   const [periodReturn, setPeriodReturn] = useState<number | null>(null)
   const [chartLoading, setChartLoading] = useState(true)
-  const [hovered, setHovered] = useState<{ x: number; y: number; candle: Candle } | null>(null)
+  const [hoveredIdx, setHoveredIdx] = useState<number | null>(null)
 
   useEffect(() => {
     setChartLoading(true)
     setCandles([])
+    setHoveredIdx(null)
     fetch(`/api/ticker/${symbol}/candles?period=${period}`)
       .then(r => r.ok ? r.json() : null)
       .then(d => {
@@ -148,72 +150,95 @@ function PriceChart({ symbol }: { symbol: string }) {
       .catch(() => setChartLoading(false))
   }, [symbol, period])
 
-  const W = 800, H = 160, PAD = { t: 12, r: 8, b: 28, l: 8 }
+  const W = 800, H = 200, PAD = { t: 12, r: 8, b: 28, l: 8 }
+  const chartH = H - PAD.t - PAD.b
+  const chartW = W - PAD.l - PAD.r
   const up = (periodReturn ?? 0) >= 0
-  const color = up ? '#3DD68C' : '#F06070'
 
-  // Build SVG path from candle close prices
-  const pts: [number, number][] = candles.length > 1 ? (() => {
-    const closes = candles.map(c => c.c)
-    const min = Math.min(...closes), max = Math.max(...closes), range = max - min || 1
-    return closes.map((v, i) => [
-      PAD.l + (i / (closes.length - 1)) * (W - PAD.l - PAD.r),
-      PAD.t + (1 - (v - min) / range) * (H - PAD.t - PAD.b),
-    ]) as [number, number][]
-  })() : []
+  // Price scale using full high/low range
+  const allHighs = candles.map(c => c.h)
+  const allLows  = candles.map(c => c.l)
+  const priceMin = candles.length ? Math.min(...allLows)  : 0
+  const priceMax = candles.length ? Math.max(...allHighs) : 1
+  const priceRange = priceMax - priceMin || 1
 
-  const line = pts.map(([x, y], i) => (i === 0 ? `M ${x} ${y}` : `L ${x} ${y}`)).join(' ')
-  const area = pts.length ? `${line} L ${pts[pts.length-1][0]} ${H - PAD.b} L ${pts[0][0]} ${H - PAD.b} Z` : ''
+  function toY(price: number) {
+    return PAD.t + (1 - (price - priceMin) / priceRange) * chartH
+  }
 
-  // X-axis labels (4 evenly spaced dates)
-  const xLabels = candles.length > 4
-    ? [0, Math.floor(candles.length/3), Math.floor(2*candles.length/3), candles.length-1].map(i => ({
-        x: PAD.l + (i / (candles.length - 1)) * (W - PAD.l - PAD.r),
+  const n = candles.length
+  const candleW = Math.max(1, Math.min(12, chartW / n - 1))
+
+  // X-axis labels
+  const xLabels = n > 4
+    ? [0, Math.floor(n / 3), Math.floor(2 * n / 3), n - 1].map(i => ({
+        x: PAD.l + (i / (n - 1)) * chartW,
         label: new Date(candles[i].t * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
       }))
     : []
 
   function handleMouseMove(e: React.MouseEvent<SVGSVGElement>) {
-    if (!candles.length || !pts.length) return
+    if (!n) return
     const rect = e.currentTarget.getBoundingClientRect()
-    const mx = ((e.clientX - rect.left) / rect.width) * W
-    // find nearest point
-    const idx = pts.reduce((best, [x], i) => Math.abs(x - mx) < Math.abs(pts[best][0] - mx) ? i : best, 0)
-    setHovered({ x: pts[idx][0], y: pts[idx][1], candle: candles[idx] })
+    const mx = ((e.clientX - rect.left) / rect.width) * W - PAD.l
+    const idx = Math.max(0, Math.min(n - 1, Math.round((mx / chartW) * (n - 1))))
+    setHoveredIdx(idx)
   }
+
+  const hc = hoveredIdx != null ? candles[hoveredIdx] : null
 
   return (
     <div className="card" style={{ padding: '20px 24px' }}>
-      {/* Header row */}
+      {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <span style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Price</span>
-          {periodReturn != null && (
-            <span style={{ fontSize: 13, fontWeight: 600, color }}>
+          {periodReturn != null && !hc && (
+            <span style={{ fontSize: 13, fontWeight: 600, color: up ? '#3DD68C' : '#F06070' }}>
               {up ? '+' : ''}{periodReturn.toFixed(2)}% ({period})
             </span>
           )}
-          {hovered && (
-            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-              ${hovered.candle.c.toFixed(2)} · {new Date(hovered.candle.t * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+          {hc && chartType === 'candle' && (
+            <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums' }}>
+              O <span style={{ color: 'var(--text-primary)' }}>${hc.o.toFixed(2)}</span>
+              {'  '}H <span style={{ color: '#3DD68C' }}>${hc.h.toFixed(2)}</span>
+              {'  '}L <span style={{ color: '#F06070' }}>${hc.l.toFixed(2)}</span>
+              {'  '}C <span style={{ color: hc.c >= hc.o ? '#3DD68C' : '#F06070', fontWeight: 600 }}>${hc.c.toFixed(2)}</span>
+              {'  '}<span style={{ color: 'var(--text-muted)' }}>{new Date(hc.t * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+            </span>
+          )}
+          {hc && chartType === 'line' && (
+            <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums' }}>
+              <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>${hc.c.toFixed(2)}</span>
+              {'  '}<span style={{ color: 'var(--text-muted)' }}>{new Date(hc.t * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
             </span>
           )}
         </div>
-        {/* Period toggle */}
-        <div style={{ display: 'flex', gap: 2, background: 'var(--bg-elevated)', borderRadius: 7, padding: 3 }}>
-          {PERIODS.map(p => (
-            <button
-              key={p}
-              onClick={() => setPeriod(p)}
-              style={{
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          {/* Chart type toggle */}
+          <div style={{ display: 'flex', gap: 2, background: 'var(--bg-elevated)', borderRadius: 7, padding: 3 }}>
+            {(['line', 'candle'] as const).map(type => (
+              <button key={type} onClick={() => setChartType(type)} style={{
                 padding: '4px 10px', borderRadius: 5, fontSize: 11.5, fontWeight: 500,
                 border: 'none', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif",
-                background: period === p ? 'var(--bg-surface)' : 'transparent',
-                color: period === p ? 'var(--gold)' : 'var(--text-muted)',
+                background: chartType === type ? 'var(--bg-surface)' : 'transparent',
+                color: chartType === type ? 'var(--gold)' : 'var(--text-muted)',
                 transition: 'all 0.15s',
-              }}
-            >{p}</button>
+              }}>{type === 'line' ? '↗' : '▮'}</button>
+            ))}
+          </div>
+          {/* Period toggle */}
+          <div style={{ display: 'flex', gap: 2, background: 'var(--bg-elevated)', borderRadius: 7, padding: 3 }}>
+          {PERIODS.map(p => (
+            <button key={p} onClick={() => setPeriod(p)} style={{
+              padding: '4px 10px', borderRadius: 5, fontSize: 11.5, fontWeight: 500,
+              border: 'none', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif",
+              background: period === p ? 'var(--bg-surface)' : 'transparent',
+              color: period === p ? 'var(--gold)' : 'var(--text-muted)',
+              transition: 'all 0.15s',
+            }}>{p}</button>
           ))}
+          </div>
         </div>
       </div>
 
@@ -222,51 +247,109 @@ function PriceChart({ symbol }: { symbol: string }) {
         <div style={{ height: H, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ width: 18, height: 18, border: '2px solid var(--border-bright)', borderTopColor: 'var(--gold)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
         </div>
-      ) : candles.length < 2 ? (
+      ) : n < 2 ? (
         <div style={{ height: H, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>No chart data for this period</span>
         </div>
       ) : (
         <svg
           viewBox={`0 0 ${W} ${H}`}
-          style={{ width: '100%', height: H, cursor: 'crosshair', overflow: 'visible' }}
+          style={{ width: '100%', height: H, cursor: 'crosshair' }}
           onMouseMove={handleMouseMove}
-          onMouseLeave={() => setHovered(null)}
+          onMouseLeave={() => setHoveredIdx(null)}
         >
-          <defs>
-            <linearGradient id={`chart-g-${symbol}`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={color} stopOpacity="0.18" />
-              <stop offset="100%" stopColor={color} stopOpacity="0.01" />
-            </linearGradient>
-          </defs>
-
-          {/* Horizontal grid lines */}
+          {/* Grid lines */}
           {[0.25, 0.5, 0.75].map(f => (
             <line key={f}
-              x1={PAD.l} y1={PAD.t + f * (H - PAD.t - PAD.b)}
-              x2={W - PAD.r} y2={PAD.t + f * (H - PAD.t - PAD.b)}
+              x1={PAD.l} y1={PAD.t + f * chartH}
+              x2={W - PAD.r} y2={PAD.t + f * chartH}
               stroke="var(--border)" strokeWidth="1" strokeDasharray="3 4"
             />
           ))}
 
-          {/* Area fill */}
-          <path d={area} fill={`url(#chart-g-${symbol})`} />
+          {/* Price labels on grid lines */}
+          {[0.25, 0.5, 0.75].map(f => {
+            const price = priceMax - f * priceRange
+            return (
+              <text key={f} x={W - PAD.r - 2} y={PAD.t + f * chartH - 3}
+                textAnchor="end" fill="var(--text-muted)" fontSize="8.5" fontFamily="'DM Sans', sans-serif">
+                ${price.toFixed(0)}
+              </text>
+            )
+          })}
 
-          {/* Line */}
-          <path d={line} fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          {/* Chart content */}
+          {chartType === 'candle' ? (
+            <>
+              {candles.map((c, i) => {
+                const x = PAD.l + (i / (n - 1)) * chartW
+                const isUp = c.c >= c.o
+                const color = isUp ? '#3DD68C' : '#F06070'
+                const bodyTop    = toY(Math.max(c.o, c.c))
+                const bodyBottom = toY(Math.min(c.o, c.c))
+                const bodyH = Math.max(1, bodyBottom - bodyTop)
+                const isHovered = hoveredIdx === i
+                return (
+                  <g key={i} opacity={hoveredIdx != null && !isHovered ? 0.5 : 1} style={{ transition: 'opacity 0.1s' }}>
+                    <line x1={x} y1={toY(c.h)} x2={x} y2={toY(c.l)} stroke={color} strokeWidth={isHovered ? 1.5 : 1}/>
+                    <rect
+                      x={x - candleW / 2} y={bodyTop} width={candleW} height={bodyH}
+                      fill={color} fillOpacity={isUp ? 0.85 : 1}
+                      stroke={color} strokeWidth={isHovered ? 1.5 : 0.5}
+                      rx={candleW > 4 ? 1 : 0}
+                    />
+                  </g>
+                )
+              })}
+            </>
+          ) : (
+            <>
+              <defs>
+                <linearGradient id={`lineArea-${symbol}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={up ? '#3DD68C' : '#F06070'} stopOpacity="0.18"/>
+                  <stop offset="100%" stopColor={up ? '#3DD68C' : '#F06070'} stopOpacity="0"/>
+                </linearGradient>
+              </defs>
+              <path
+                d={candles.map((c, i) => `${i === 0 ? 'M' : 'L'} ${PAD.l + (i / (n - 1)) * chartW} ${toY(c.c)}`).join(' ')
+                  + ` L ${PAD.l + chartW} ${PAD.t + chartH} L ${PAD.l} ${PAD.t + chartH} Z`}
+                fill={`url(#lineArea-${symbol})`}
+              />
+              <path
+                d={candles.map((c, i) => `${i === 0 ? 'M' : 'L'} ${PAD.l + (i / (n - 1)) * chartW} ${toY(c.c)}`).join(' ')}
+                fill="none"
+                stroke={up ? '#3DD68C' : '#F06070'}
+                strokeWidth="1.5"
+              />
+              {hoveredIdx != null && (
+                <circle
+                  cx={PAD.l + (hoveredIdx / (n - 1)) * chartW}
+                  cy={toY(candles[hoveredIdx].c)}
+                  r="4" fill={up ? '#3DD68C' : '#F06070'}
+                  stroke="var(--bg-surface)" strokeWidth="1.5"
+                />
+              )}
+            </>
+          )}
+
+          {/* Hover crosshair */}
+          {hoveredIdx != null && (
+            <line
+              x1={PAD.l + (hoveredIdx / (n - 1)) * chartW}
+              y1={PAD.t}
+              x2={PAD.l + (hoveredIdx / (n - 1)) * chartW}
+              y2={H - PAD.b}
+              stroke="var(--border-bright)" strokeWidth="1" strokeDasharray="3 3"
+            />
+          )}
 
           {/* X-axis labels */}
           {xLabels.map(({ x, label }) => (
-            <text key={label} x={x} y={H - 4} textAnchor="middle" fill="var(--text-muted)" fontSize="9.5" fontFamily="'DM Sans', sans-serif">{label}</text>
+            <text key={label} x={x} y={H - 4} textAnchor="middle"
+              fill="var(--text-muted)" fontSize="9.5" fontFamily="'DM Sans', sans-serif">
+              {label}
+            </text>
           ))}
-
-          {/* Hover crosshair */}
-          {hovered && (
-            <>
-              <line x1={hovered.x} y1={PAD.t} x2={hovered.x} y2={H - PAD.b} stroke="var(--border-bright)" strokeWidth="1" strokeDasharray="3 3" />
-              <circle cx={hovered.x} cy={hovered.y} r="4" fill={color} stroke="var(--bg-surface)" strokeWidth="2" />
-            </>
-          )}
         </svg>
       )}
     </div>
@@ -470,7 +553,7 @@ export default function TickerPage() {
                 <MetricCard label="Market Cap" value={fmtMarketCap(data.marketCap)} sub={data.exchange} />
                 <MetricCard
                   label="52-Week Range"
-                  value={`$${fmt(data.week52Low ?? data.low52, 0)} – $${fmt(data.week52High ?? data.high52, 0)}`}
+                  value={`$${fmt(data.week52Low ?? data.dayLow, 0)} – $${fmt(data.week52High ?? data.dayHigh, 0)}`}
                   sub="Low / High"
                 />
                 <MetricCard
@@ -487,8 +570,8 @@ export default function TickerPage() {
                   {[
                     { label: 'Open', value: `$${fmt(data.open)}` },
                     { label: 'Prev Close', value: `$${fmt(data.prevClose)}` },
-                    { label: 'Day High', value: `$${fmt(data.high52)}` },
-                    { label: 'Day Low', value: `$${fmt(data.low52)}` },
+                    { label: 'Day High', value: `$${fmt(data.dayHigh)}` },
+                    { label: 'Day Low', value: `$${fmt(data.dayLow)}` },
                     { label: '52W High', value: `$${fmt(data.week52High)}` },
                     { label: '52W Low', value: `$${fmt(data.week52Low)}` },
                   ].map(({ label, value }) => (

@@ -131,14 +131,18 @@ function TopBar() {
       }
     }
     document.addEventListener('mousedown', onClickOutside)
-    return () => { clearInterval(id); document.removeEventListener('mousedown', onClickOutside) }
+    return () => {
+      clearInterval(id)
+      document.removeEventListener('mousedown', onClickOutside)
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
   }, [])
 
   function handleQueryChange(e: React.ChangeEvent<HTMLInputElement>) {
     const val = e.target.value
     setQuery(val)
     if (debounceRef.current) clearTimeout(debounceRef.current)
-    if (!val.trim()) { setResults([]); setOpen(false); return }
+    if (!val.trim()) { setResults([]); setOpen(false); setSearching(false); return }
     debounceRef.current = setTimeout(async () => {
       setSearching(true)
       try {

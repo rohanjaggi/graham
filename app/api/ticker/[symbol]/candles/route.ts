@@ -36,10 +36,10 @@ export async function GET(
   const quote = result.indicators?.quote?.[0] ?? {}
   const closes: (number | null)[] = quote.close ?? []
 
-  // Filter out null entries (market closures)
+  // Filter out entries with any null OHLCV field (market closures / incomplete data)
   const candles = timestamps
     .map((t, i) => ({ t, c: closes[i], o: quote.open?.[i], h: quote.high?.[i], l: quote.low?.[i], v: quote.volume?.[i] }))
-    .filter(c => c.c != null) as { t: number; c: number; o: number; h: number; l: number; v: number }[]
+    .filter(c => c.c != null && c.o != null && c.h != null && c.l != null && c.v != null) as { t: number; c: number; o: number; h: number; l: number; v: number }[]
 
   if (candles.length < 2) return NextResponse.json({ error: 'Insufficient data' }, { status: 404 })
 
