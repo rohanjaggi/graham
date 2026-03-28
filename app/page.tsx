@@ -138,7 +138,10 @@ export default function Landing() {
         background: 'rgba(7,12,21,0.88)',
         backdropFilter: 'blur(20px)',
       }}>
-        <div className="font-display text-gold-gradient" style={{ fontSize: 22, fontWeight: 500, letterSpacing: '-0.01em' }}>Graham</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <img src="/images/graham-logo.png" alt="Graham" style={{ width: 72, height: 72, objectFit: 'contain', filter: 'invert(1) sepia(1) saturate(2) hue-rotate(5deg) brightness(0.85)', flexShrink: 0 }} />
+          <div className="font-display text-gold-gradient" style={{ fontSize: 29, fontWeight: 500, letterSpacing: '-0.01em', lineHeight: 1 }}>Graham</div>
+        </div>
 
         <div style={{ display: 'flex', gap: 36, fontSize: 13, color: 'var(--text-secondary)' }}>
           {([
@@ -409,7 +412,10 @@ export default function Landing() {
       {/* ── FOOTER ── */}
       <footer style={{ padding: '28px 56px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <div className="font-display text-gold-gradient" style={{ fontSize: 19, fontWeight: 500 }}>Graham</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <img src="/images/graham-logo.png" alt="Graham" style={{ width: 28, height: 28, objectFit: 'contain', filter: 'invert(1) sepia(1) saturate(2) hue-rotate(5deg) brightness(0.85)' }} />
+            <div className="font-display text-gold-gradient" style={{ fontSize: 19, fontWeight: 500 }}>Graham</div>
+          </div>
           <div style={{ fontSize: 10.5, color: 'var(--text-muted)', marginTop: 3, letterSpacing: '0.06em' }}>Long-Term Investment Intelligence</div>
         </div>
         <div style={{ fontSize: 11.5, color: 'var(--text-muted)', textAlign: 'right' }}>

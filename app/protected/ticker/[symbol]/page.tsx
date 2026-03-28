@@ -71,13 +71,14 @@ function Sidebar() {
       padding: '0 14px',
     }}>
       <div
-        style={{ padding: '26px 6px 22px', borderBottom: '1px solid var(--border)', cursor: 'pointer' }}
+        style={{ padding: '0 6px 14px', borderBottom: '1px solid var(--border)', cursor: 'pointer', textAlign: 'center' }}
         onClick={() => router.push('/protected')}
       >
-        <div className="font-display text-gold-gradient" style={{ fontSize: 30, fontWeight: 500, letterSpacing: '-0.02em', lineHeight: 1 }}>
+        <img src="/images/graham-logo.png" alt="Graham" style={{ width: 140, height: 140, objectFit: 'contain', filter: 'invert(1) sepia(1) saturate(2) hue-rotate(5deg) brightness(0.85)', display: 'block', margin: '-20px auto -30px' }} />
+        <div className="font-display text-gold-gradient" style={{ fontSize: 28, fontWeight: 500, letterSpacing: '-0.02em', lineHeight: 1 }}>
           Graham
         </div>
-        <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.13em', marginTop: 6, textTransform: 'uppercase' }}>
+        <div style={{ fontSize: 9.5, color: 'var(--text-muted)', letterSpacing: '0.13em', marginTop: 5, textTransform: 'uppercase' }}>
           Long-Term Intelligence
         </div>
       </div>

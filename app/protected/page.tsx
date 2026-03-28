@@ -37,11 +37,12 @@ function Sidebar() {
       padding: '0 14px',
     }}>
       {/* Logo */}
-      <div style={{ padding: '26px 6px 22px', borderBottom: '1px solid var(--border)' }}>
-        <div className="font-display text-gold-gradient" style={{ fontSize: 30, fontWeight: 500, letterSpacing: '-0.02em', lineHeight: 1 }}>
+      <div style={{ padding: '0 6px 14px', borderBottom: '1px solid var(--border)', textAlign: 'center' }}>
+        <img src="/images/graham-logo.png" alt="Graham" style={{ width: 140, height: 140, objectFit: 'contain', filter: 'invert(1) sepia(1) saturate(2) hue-rotate(5deg) brightness(0.85)', display: 'block', margin: '-15px auto -30px' }} />
+        <div className="font-display text-gold-gradient" style={{ fontSize: 28, fontWeight: 500, letterSpacing: '-0.02em', lineHeight: 1 }}>
           Graham
         </div>
-        <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.13em', marginTop: 6, textTransform: 'uppercase' }}>
+        <div style={{ fontSize: 9.5, color: 'var(--text-muted)', letterSpacing: '0.13em', marginTop: 5, textTransform: 'uppercase' }}>
           Long-Term Intelligence
         </div>
       </div>
@@ -226,8 +227,10 @@ function TopBar() {
         <div style={{ width: 1, height: 28, background: 'var(--border)' }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'linear-gradient(135deg, var(--gold-bright), var(--gold))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#0A0C12', flexShrink: 0 }}>
-              {initial}
+            <div style={{ position: 'relative', width: 28, height: 28, flexShrink: 0 }}>
+              <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'linear-gradient(135deg, var(--gold-bright), var(--gold))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#0A0C12' }}>
+                {initial}
+              </div>
             </div>
             <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{displayName}</span>
           </div>
