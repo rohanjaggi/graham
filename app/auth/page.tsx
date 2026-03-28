@@ -56,7 +56,7 @@ export default function AuthPage() {
       if (error) { setError(error.message); setLoading(false); return }
       // Route to onboarding if profile not yet completed
       const profileComplete = data.user?.user_metadata?.profile_complete
-      router.push(profileComplete ? '/protected' : '/onboarding')
+      window.location.href = profileComplete ? '/protected' : '/onboarding'
     }
 
     setLoading(false)

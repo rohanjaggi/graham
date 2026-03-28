@@ -126,7 +126,7 @@ export default function Onboarding() {
       return
     }
 
-    router.push('/protected')
+    window.location.href = '/protected'
   }
 
   return (
