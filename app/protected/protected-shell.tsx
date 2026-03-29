@@ -9,7 +9,7 @@ type NavItem = { label: string; href?: string }
 
 const NAV: { section: string; items: NavItem[] }[] = [
   { section: 'ANALYSIS',  items: [{ label: 'Overview', href: '/protected' }, { label: 'Research' }, { label: 'Technical' }] },
-  { section: 'VALUATION', items: [{ label: 'DCF Model' }, { label: 'Comparables' }] },
+  { section: 'VALUATION', items: [{ label: 'DCF Model', href: '/protected/valuation' }, { label: 'Comparables', href: '/protected/valuation' }] },
   { section: 'PORTFOLIO', items: [{ label: 'Optimiser', href: '/protected/optimiser' }, { label: 'Tail Risk' }] },
 ]
 
