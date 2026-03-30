@@ -14,6 +14,7 @@ interface CompanyData {
   pe: number | null
   pb: number | null
   evEbitda: number | null
+  evRevenue: number | null
   roe: number | null
   grossMargin: number | null
   revenueGrowth: number | null
@@ -187,16 +188,73 @@ function EmptyState() {
 
 /* ─── COMPARABLES TAB ────────────────────────────────────────────────────── */
 
-const METRIC_KEYS: { key: keyof CompanyData; label: string; valuation: boolean }[] = [
-  { key: 'pe',          label: 'P/E',          valuation: true },
-  { key: 'evEbitda',    label: 'EV/EBITDA',    valuation: true },
-  { key: 'pb',          label: 'P/B',          valuation: true },
-  { key: 'grossMargin', label: 'Gross Margin', valuation: false },
-  { key: 'roe',         label: 'ROE',          valuation: false },
+const METRIC_KEYS: { key: keyof CompanyData; label: string; valuation: boolean; interpretation: string }[] = [
+  { key: 'pe',          label: 'P/E',          valuation: true,  interpretation: 'Price / Earnings. Lower = cheaper. Less meaningful for unprofitable or hyper-growth companies where earnings understate value.' },
+  { key: 'evEbitda',    label: 'EV/EBITDA',    valuation: true,  interpretation: 'Enterprise Value / Operating Profit. Capital-structure neutral — removes debt distortion. The most broadly applicable valuation multiple.' },
+  { key: 'pb',          label: 'P/B',          valuation: true,  interpretation: 'Price / Book Value. Most relevant for asset-heavy sectors (banks, real estate, industrials). Less useful for asset-light software businesses.' },
+  { key: 'evRevenue',   label: 'EV/Revenue',   valuation: true,  interpretation: 'Enterprise Value / Revenue. Best for high-growth or pre-profit companies where EBITDA is not yet meaningful. Also useful for SaaS and platform businesses.' },
+  { key: 'grossMargin', label: 'Gross Margin', valuation: false, interpretation: 'Revenue minus direct costs (%). Higher = stronger pricing power and competitive moat. A key differentiator between commodity and software businesses.' },
+  { key: 'roe',         label: 'ROE',          valuation: false, interpretation: 'Net Income / Shareholders\' Equity. Measures how efficiently a company generates profit from equity capital. High ROE can justify premium multiples.' },
 ]
+
+// Only these metrics are valid for implied valuation (margin/ROE are not price-based multiples)
+const IMPLIED_VALUATION_KEYS = new Set(['pe', 'evEbitda', 'evRevenue'])
 
 function ComparablesSuffix(key: string) {
   return key === 'grossMargin' || key === 'roe' ? '%' : 'x'
+}
+
+/* ─── GROWTH-ADJUSTED VERDICT ────────────────────────────────────────────── */
+
+interface VerdictResult {
+  verdict: string
+  verdictColor: string
+  growthAdvantage: number
+  marginAdvantage: number
+  medianGrowth: number
+  medianMargin: number
+  avgExcessPremium: number
+  signals: { key: string; label: string; premium: number; justifiedPremium: number; excess: number }[]
+}
+
+function computeValuationVerdict(
+  subject: CompanyData,
+  peers: CompanyData[],
+  medians: Partial<Record<keyof CompanyData, number | null>>
+): VerdictResult | null {
+  const peerGrowths = peers.map(p => p.revenueGrowth).filter((v): v is number => v != null)
+  const peerMargins = peers.map(p => p.grossMargin).filter((v): v is number => v != null)
+  const medianGrowth = median(peerGrowths) ?? 0
+  const medianMargin = median(peerMargins) ?? 0
+  const growthAdvantage = (subject.revenueGrowth ?? 0) - medianGrowth
+  const marginAdvantage = (subject.grossMargin ?? 0) - medianMargin
+
+  // Justified premium rule:
+  // Each 1pp of growth advantage justifies ~1.5% multiple premium (PEG-inspired)
+  // Each 1pp of margin advantage justifies ~0.5% premium (quality)
+  const justifiedPremium = growthAdvantage * 1.5 + Math.max(0, marginAdvantage) * 0.5
+
+  const signals: VerdictResult['signals'] = []
+  for (const { key, label } of METRIC_KEYS.filter(m => IMPLIED_VALUATION_KEYS.has(m.key))) {
+    const subVal = subject[key as keyof CompanyData] as number | null
+    const med = medians[key as keyof CompanyData]
+    if (subVal == null || med == null || med === 0) continue
+    const premium = ((subVal - med) / med) * 100
+    signals.push({ key, label, premium, justifiedPremium, excess: premium - justifiedPremium })
+  }
+
+  if (!signals.length) return null
+
+  const avgExcessPremium = signals.reduce((s, x) => s + x.excess, 0) / signals.length
+
+  let verdict: string, verdictColor: string
+  if (avgExcessPremium > 25)      { verdict = 'Overvalued';           verdictColor = '#F06070' }
+  else if (avgExcessPremium > 10) { verdict = 'Slightly Overvalued';  verdictColor = '#F09060' }
+  else if (avgExcessPremium < -25){ verdict = 'Undervalued';          verdictColor = '#3DD68C' }
+  else if (avgExcessPremium < -10){ verdict = 'Slightly Undervalued'; verdictColor = '#7DD6AC' }
+  else                             { verdict = 'Fairly Valued';        verdictColor = 'var(--gold)' }
+
+  return { verdict, verdictColor, growthAdvantage, marginAdvantage, medianGrowth, medianMargin, avgExcessPremium, signals }
 }
 
 function ComparablesTab({ symbol }: { symbol: string }) {
@@ -280,25 +338,36 @@ function ComparablesTab({ symbol }: { symbol: string }) {
   // Distribution strips (top 3 by weight)
   const top3 = orderedMetrics.slice(0, 3)
 
-  // Implied valuation
-  const impliedPrices: { label: string; implied: number; peerCount: number; weight: number }[] = []
+  // Implied valuation — P/E, EV/EBITDA, EV/Revenue only
+  const peerGrowths = peers.map(p => p.revenueGrowth).filter((v): v is number => v != null)
+  const peerMargins = peers.map(p => p.grossMargin).filter((v): v is number => v != null)
+  const medianGrowth = median(peerGrowths) ?? 0
+  const medianMargin = median(peerMargins) ?? 0
+  const growthAdvantage = (subject.revenueGrowth ?? 0) - medianGrowth
+  const marginAdvantage = (subject.grossMargin ?? 0) - medianMargin
+  // Each 1pp growth advantage justifies ~1.5% premium; each 1pp margin advantage ~0.5%
+  const justifiedPremiumPct = growthAdvantage * 1.5 + Math.max(0, marginAdvantage) * 0.5
+
+  const impliedPrices: { label: string; implied: number; impliedAdj: number; peerCount: number; weight: number }[] = []
   if (subject.price != null) {
-    for (const { key, label } of METRIC_KEYS) {
-      const subjectRatio = subject[key] as number | null
-      const med = medians[key]
+    for (const { key, label } of METRIC_KEYS.filter(m => IMPLIED_VALUATION_KEYS.has(m.key))) {
+      const subjectRatio = subject[key as keyof CompanyData] as number | null
+      const med = medians[key as keyof CompanyData]
       const weight = metricWeights[key]?.score ?? 5
       if (weight < 6) continue
       if (subjectRatio == null || med == null || subjectRatio === 0) continue
-      const peerVals = peers.map(p => p[key] as number | null).filter((v): v is number => v != null)
+      const peerVals = peers.map(p => p[key as keyof CompanyData] as number | null).filter((v): v is number => v != null)
       if (peerVals.length < 3) continue
-      impliedPrices.push({
-        label,
-        implied: subject.price! * (med / subjectRatio),
-        peerCount: peerVals.length,
-        weight,
-      })
+      const rawImplied = subject.price! * (med / subjectRatio)
+      // Growth-adjusted: peer median uplifted by the justified premium
+      const adjMed = (med as number) * (1 + justifiedPremiumPct / 100)
+      const adjImplied = subject.price! * (adjMed / subjectRatio)
+      impliedPrices.push({ label, implied: rawImplied, impliedAdj: adjImplied, peerCount: peerVals.length, weight })
     }
   }
+
+  // Valuation verdict
+  const verdict = computeValuationVerdict(subject, peers, medians)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -334,20 +403,17 @@ function ComparablesTab({ symbol }: { symbol: string }) {
               {aiInsights.peerAssessments.map(p => (
                 <div key={p.symbol} style={{ display: 'flex', alignItems: 'center', gap: 10, opacity: p.keep ? 1 : 0.45 }}>
                   <span style={{ fontSize: 12, fontWeight: 600, color: p.keep ? 'var(--gold)' : 'var(--text-muted)', minWidth: 52 }}>{p.symbol}</span>
-                  <span style={{
-                    fontSize: 10.5, padding: '1px 7px', borderRadius: 4, fontWeight: 600,
-                    background: p.score >= 7 ? 'rgba(61,214,140,0.12)' : p.score >= 4 ? 'rgba(200,169,110,0.1)' : 'rgba(240,96,112,0.1)',
-                    color: p.score >= 7 ? '#3DD68C' : p.score >= 4 ? 'var(--gold)' : '#F06070',
-                  }}>{p.score}/10</span>
+                  {p.aiAdded ? (
+                    <span style={{ fontSize: 10.5, padding: '1px 7px', borderRadius: 4, fontWeight: 600, background: 'rgba(200,169,110,0.15)', color: 'var(--gold)' }}>AI +</span>
+                  ) : (
+                    <span style={{
+                      fontSize: 10.5, padding: '1px 7px', borderRadius: 4, fontWeight: 600,
+                      background: p.score >= 7 ? 'rgba(61,214,140,0.12)' : p.score >= 4 ? 'rgba(200,169,110,0.1)' : 'rgba(240,96,112,0.1)',
+                      color: p.score >= 7 ? '#3DD68C' : p.score >= 4 ? 'var(--gold)' : '#F06070',
+                    }}>{p.score}/10</span>
+                  )}
                   <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{p.reason}</span>
-                  {!p.keep && <span style={{ fontSize: 10, color: '#F06070', marginLeft: 'auto' }}>removed</span>}
-                </div>
-              ))}
-              {aiInsights.suggestedAdditions.map(sym => (
-                <div key={sym} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--gold)', minWidth: 52 }}>{sym}</span>
-                  <span style={{ fontSize: 10.5, padding: '1px 7px', borderRadius: 4, fontWeight: 600, background: 'rgba(200,169,110,0.15)', color: 'var(--gold)' }}>AI +</span>
-                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Suggested by Graham as a closer comparable</span>
+                  {!p.keep && !p.aiAdded && <span style={{ fontSize: 10, color: '#F06070', marginLeft: 'auto' }}>removed</span>}
                 </div>
               ))}
             </div>
@@ -371,12 +437,14 @@ function ComparablesTab({ symbol }: { symbol: string }) {
                 <th style={{ padding: '10px 16px', textAlign: 'right', fontSize: 11, color: 'var(--text-muted)', fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap' }} onClick={() => handleSort('marketCap')}>
                   Mkt Cap {sortKey === 'marketCap' ? (sortAsc ? '↑' : '↓') : ''}
                 </th>
-                {orderedMetrics.map(({ key, label }) => {
+                {orderedMetrics.map(({ key, label, interpretation }) => {
                   const w = metricWeights[key]?.score ?? 5
+                  const aiReason = metricWeights[key]?.reason
+                  const tooltip = aiReason ? `${interpretation}\n\nAI: ${aiReason}` : interpretation
                   return (
                     <th
                       key={key}
-                      title={metricWeights[key]?.reason}
+                      title={tooltip}
                       style={{ padding: '10px 16px', textAlign: 'right', fontSize: 11, color: 'var(--text-muted)', fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap', opacity: w < 4 ? 0.45 : 1 }}
                       onClick={() => handleSort(key)}
                     >
@@ -522,23 +590,39 @@ function ComparablesTab({ symbol }: { symbol: string }) {
           <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 20 }}>
             Implied price if {subject.symbol} traded at peer-median multiples
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 12, marginBottom: impliedPrices.length >= 2 ? 24 : 0 }}>
-            {impliedPrices.map(({ label, implied, peerCount, weight }) => {
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12, marginBottom: impliedPrices.length >= 2 ? 24 : 0 }}>
+            {impliedPrices.map(({ label, implied, impliedAdj, peerCount, weight }) => {
               const diff = ((implied - subject.price!) / subject.price!) * 100
+              const diffAdj = ((impliedAdj - subject.price!) / subject.price!) * 100
               const up = diff >= 0
+              const upAdj = diffAdj >= 0
+              const hasGrowthAdj = Math.abs(justifiedPremiumPct) > 2
               return (
                 <div key={label} className="card" style={{ padding: '16px 18px', background: 'var(--bg-elevated)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
                     <span style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</span>
                     <span style={{ fontSize: 9.5, background: weight >= 8 ? 'rgba(200,169,110,0.12)' : 'var(--bg-surface)', color: weight >= 8 ? 'var(--gold)' : 'var(--text-muted)', padding: '1px 5px', borderRadius: 3 }}>{weight}/10</span>
                   </div>
-                  <div style={{ fontSize: 22, fontWeight: 600, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums', marginBottom: 4 }}>
+                  <div style={{ fontSize: 22, fontWeight: 600, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums', marginBottom: 2 }}>
                     ${implied.toFixed(2)}
                   </div>
-                  <div style={{ fontSize: 12, color: up ? '#3DD68C' : '#F06070', fontWeight: 500 }}>
+                  <div style={{ fontSize: 12, color: up ? '#3DD68C' : '#F06070', fontWeight: 500, marginBottom: hasGrowthAdj ? 8 : 0 }}>
                     {up ? '▲' : '▼'} {Math.abs(diff).toFixed(1)}% vs current
                   </div>
-                  <div style={{ fontSize: 10.5, color: 'var(--text-muted)', marginTop: 4 }}>Based on {peerCount} peers</div>
+                  {hasGrowthAdj && (
+                    <div style={{ borderTop: '1px solid var(--border)', paddingTop: 8 }}>
+                      <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 3 }}>
+                        Growth-adjusted ({justifiedPremiumPct >= 0 ? '+' : ''}{justifiedPremiumPct.toFixed(0)}% justified)
+                      </div>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums' }}>
+                        ${impliedAdj.toFixed(2)}{' '}
+                        <span style={{ fontSize: 11, color: upAdj ? '#3DD68C' : '#F06070', fontWeight: 500 }}>
+                          {upAdj ? '▲' : '▼'} {Math.abs(diffAdj).toFixed(1)}%
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                  <div style={{ fontSize: 10.5, color: 'var(--text-muted)', marginTop: 6 }}>Based on {peerCount} peers</div>
                 </div>
               )
             })}
@@ -576,6 +660,81 @@ function ComparablesTab({ symbol }: { symbol: string }) {
           })()}
         </div>
       )}
+
+      {/* Valuation Assessment */}
+      {verdict && (
+        <div className="card" style={{ padding: '20px 24px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16 }}>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Valuation Assessment</div>
+            <span style={{
+              fontSize: 12, fontWeight: 700, padding: '3px 12px', borderRadius: 5,
+              background: `${verdict.verdictColor}18`,
+              color: verdict.verdictColor,
+              letterSpacing: '0.04em',
+            }}>{verdict.verdict}</span>
+          </div>
+
+          {/* Growth & margin context */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+            <div style={{ background: 'var(--bg-elevated)', borderRadius: 8, padding: '12px 14px' }}>
+              <div style={{ fontSize: 10.5, color: 'var(--text-muted)', marginBottom: 4 }}>Revenue Growth vs Peers</div>
+              <div style={{ fontSize: 15, fontWeight: 600, color: verdict.growthAdvantage >= 0 ? '#3DD68C' : '#F06070', fontVariantNumeric: 'tabular-nums' }}>
+                {verdict.growthAdvantage >= 0 ? '+' : ''}{verdict.growthAdvantage.toFixed(1)}pp
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                {subject.symbol} {fmt(subject.revenueGrowth, 1)}% vs peer median {fmt(verdict.medianGrowth, 1)}%
+              </div>
+            </div>
+            <div style={{ background: 'var(--bg-elevated)', borderRadius: 8, padding: '12px 14px' }}>
+              <div style={{ fontSize: 10.5, color: 'var(--text-muted)', marginBottom: 4 }}>Gross Margin vs Peers</div>
+              <div style={{ fontSize: 15, fontWeight: 600, color: verdict.marginAdvantage >= 0 ? '#3DD68C' : '#F06070', fontVariantNumeric: 'tabular-nums' }}>
+                {verdict.marginAdvantage >= 0 ? '+' : ''}{verdict.marginAdvantage.toFixed(1)}pp
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                {subject.symbol} {fmt(subject.grossMargin, 1)}% vs peer median {fmt(verdict.medianMargin, 1)}%
+              </div>
+            </div>
+          </div>
+
+          {/* Per-metric breakdown */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {verdict.signals.map(sig => {
+              const isPremium = sig.premium > 0
+              const isJustified = Math.abs(sig.excess) <= 15
+              return (
+                <div key={sig.key} style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 12.5 }}>
+                  <span style={{ minWidth: 72, color: 'var(--text-muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{sig.label}</span>
+                  <span style={{ color: isPremium ? '#F06070' : '#3DD68C', fontWeight: 500, minWidth: 60, fontVariantNumeric: 'tabular-nums' }}>
+                    {isPremium ? '+' : ''}{sig.premium.toFixed(0)}% vs peers
+                  </span>
+                  <span style={{
+                    fontSize: 10.5, padding: '1px 7px', borderRadius: 4, fontWeight: 500,
+                    background: isJustified ? 'rgba(61,214,140,0.1)' : 'rgba(240,96,112,0.1)',
+                    color: isJustified ? '#3DD68C' : '#F06070',
+                  }}>
+                    {isJustified ? 'justified' : sig.excess > 0 ? 'excess premium' : 'discount'}
+                  </span>
+                  {sig.justifiedPremium !== 0 && (
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                      {sig.justifiedPremium >= 0 ? '+' : ''}{sig.justifiedPremium.toFixed(0)}% justified by growth/margins
+                    </span>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+
+          {verdict.signals.length > 0 && (
+            <div style={{ marginTop: 14, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.6, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+              {verdict.avgExcessPremium > 10
+                ? `${subject.symbol} trades at a premium to peers that exceeds what its growth and margin profile can justify. The excess premium of ~${verdict.avgExcessPremium.toFixed(0)}pp suggests the market is pricing in above-consensus expectations.`
+                : verdict.avgExcessPremium < -10
+                ? `${subject.symbol} appears to trade at a discount to peers despite its fundamental profile. This may signal an entry opportunity or reflect market concerns not captured in trailing metrics.`
+                : `${subject.symbol}'s valuation appears broadly in line with peers once its growth and margin profile is accounted for. The premium/discount is within the range that fundamentals can reasonably justify.`}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -608,18 +767,38 @@ function CompsLoading() {
 
 /* ─── MAIN PAGE ──────────────────────────────────────────────────────────── */
 
+type CompanyProfile = { name: string; logo: string | null; sector: string | null; marketCap: number | null; price: number | null; revenueGrowth: number | null }
+
 function ValuationContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [symbol, setSymbol] = useState(searchParams.get('symbol')?.toUpperCase() ?? '')
-  const [companyName, setCompanyName] = useState('')
+  const [profile, setProfile] = useState<CompanyProfile | null>(null)
   const [activeTab, setActiveTab] = useState<'dcf' | 'comparables'>('dcf')
   const [compsKey, setCompsKey] = useState(0) // increment to re-mount comps on symbol change
 
-  const handleSelect = useCallback((sym: string, name: string) => {
+  useEffect(() => {
+    if (!symbol) { setProfile(null); return }
+    setProfile(null)
+    fetch(`/api/ticker/${symbol}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (!d) return
+        setProfile({
+          name: d.name ?? symbol,
+          logo: d.logo ?? null,
+          sector: d.sector ?? null,
+          marketCap: d.marketCap ?? null,
+          price: d.price ?? null,
+          revenueGrowth: d.revenueGrowthYoy ?? null,
+        })
+      })
+      .catch(() => {})
+  }, [symbol])
+
+  const handleSelect = useCallback((sym: string, _name: string) => {
     const upper = sym.toUpperCase()
     setSymbol(upper)
-    setCompanyName(name)
     setCompsKey(k => k + 1)
     router.push(`/protected/valuation?symbol=${upper}`, { scroll: false })
   }, [router])
@@ -636,14 +815,53 @@ function ValuationContent() {
       <div style={{ marginBottom: 28 }}>
         <div style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>Select Company</div>
         <TickerSearch value={symbol} onSelect={handleSelect} />
-        {symbol && companyName && (
-          <div style={{ marginTop: 10, fontSize: 13, color: 'var(--text-secondary)' }}>
-            Analysing <span style={{ color: 'var(--gold)', fontWeight: 600 }}>{symbol}</span> · {companyName}
-          </div>
-        )}
-        {symbol && !companyName && (
-          <div style={{ marginTop: 10, fontSize: 13, color: 'var(--text-secondary)' }}>
-            Analysing <span style={{ color: 'var(--gold)', fontWeight: 600 }}>{symbol}</span>
+        {symbol && (
+          <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 14, padding: '14px 18px', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 10 }}>
+            {profile?.logo ? (
+              <img src={profile.logo} alt={profile.name} style={{ width: 36, height: 36, objectFit: 'contain', borderRadius: 6, background: '#fff', padding: 3, flexShrink: 0 }} onError={e => { e.currentTarget.style.display = 'none' }} />
+            ) : (
+              <div style={{ width: 36, height: 36, borderRadius: 6, background: 'rgba(200,169,110,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: 'var(--gold)', flexShrink: 0 }}>
+                {symbol[0]}
+              </div>
+            )}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>{profile?.name ?? symbol}</span>
+                <span style={{ fontSize: 12, color: 'var(--gold)', fontWeight: 600, letterSpacing: '0.04em' }}>{symbol}</span>
+              </div>
+              {profile?.sector && (
+                <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 2 }}>{profile.sector}</div>
+              )}
+            </div>
+            {profile && (
+              <div style={{ display: 'flex', gap: 24, flexShrink: 0 }}>
+                {profile.price != null && (
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Price</div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginTop: 2 }}>${profile.price.toFixed(2)}</div>
+                  </div>
+                )}
+                {profile.marketCap != null && (
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Mkt Cap</div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginTop: 2 }}>
+                      {profile.marketCap >= 1000 ? `$${(profile.marketCap / 1000).toFixed(1)}T` : `$${profile.marketCap.toFixed(0)}B`}
+                    </div>
+                  </div>
+                )}
+                {profile.revenueGrowth != null && (
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Rev Growth</div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: profile.revenueGrowth >= 0 ? 'var(--green)' : 'var(--red)', marginTop: 2 }}>
+                      {profile.revenueGrowth >= 0 ? '+' : ''}{profile.revenueGrowth.toFixed(1)}%
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            {!profile && (
+              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Loading…</div>
+            )}
           </div>
         )}
       </div>

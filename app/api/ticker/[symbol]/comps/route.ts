@@ -15,6 +15,7 @@ interface CompanyData {
   pe: number | null
   pb: number | null
   evEbitda: number | null
+  evRevenue: number | null
   roe: number | null
   grossMargin: number | null
   revenueGrowth: number | null
@@ -46,6 +47,7 @@ async function fetchCompanyData(sym: string, fKey: string): Promise<CompanyData 
     pe:            metrics['peNormalizedAnnual'] ?? metrics['peTTM'] ?? null,
     pb:            metrics['pbAnnual'] ?? metrics['pbQuarterly'] ?? null,
     evEbitda:      metrics['evEbitdaTTM'] ?? null,
+    evRevenue:     metrics['evSalesAnnual'] ?? metrics['evSalesTTM'] ?? metrics['psTTM'] ?? null,
     roe:           metrics['roeTTM'] ?? null,
     grossMargin:   metrics['grossMarginTTM'] ?? null,
     revenueGrowth: metrics['revenueGrowthTTMYoy'] ?? null,
@@ -112,15 +114,22 @@ export async function GET(
     const completion = await openai.chat.completions.create({
       model: 'gpt-5.4-mini',
       response_format: { type: 'json_object' },
-      temperature: 0.2,
+      temperature: 0.1,
       messages: [
         {
           role: 'system',
-          content: `You are a senior equity research analyst. Given a subject company and a list of Finnhub-sourced peers, your job is to:
-1. Assess each peer for comparability (are they truly a close comp?)
-2. Suggest up to 3 additional tickers that would be better comparables (only well-known public US equities)
-3. Weight the most relevant valuation metrics for this specific company type
-4. Write a short analyst note on the peer group
+          content: `You are a senior equity research analyst conducting a comparable companies analysis.
+
+Score each Finnhub-sourced peer on a 1–10 scale using these five criteria (equal weight):
+1. Industry & Sector alignment — same industry, similar regulatory environment
+2. Size & Scale — comparable revenue, market cap, and operational scale
+3. Geographic Focus — similar regional exposure and market conditions
+4. Growth Prospects — similar revenue growth trajectory and market opportunity
+5. Business Model — similar product/service mix, unit economics, and margin structure
+
+A score of 5 is the minimum threshold for a peer to be considered a valid comparable. Any peer scoring below 5 must be replaced.
+
+For every peer that scores below 5, you MUST suggest a replacement ticker in "suggestedAdditions" that scores at least 7 across the five criteria above. Replacements must be well-known public US equities. Do not add replacements for peers that score 5 or above.
 
 Return a JSON object with exactly this shape:
 {
@@ -130,12 +139,13 @@ Return a JSON object with exactly this shape:
     "pe":          { "score": number (1-10), "reason": string },
     "evEbitda":    { "score": number (1-10), "reason": string },
     "pb":          { "score": number (1-10), "reason": string },
+    "evRevenue":   { "score": number (1-10), "reason": string },
     "grossMargin": { "score": number (1-10), "reason": string },
     "roe":         { "score": number (1-10), "reason": string }
   },
   "analystNote": string
 }
-Keep reasons concise (one sentence). Only suggest additions if you are confident they are public US equities with similar business models.`,
+Set "keep": true for scores >= 5, "keep": false for scores < 5. Keep reasons concise (one sentence citing which criteria failed or passed). NEVER include the subject company itself in suggestedAdditions.`,
         },
         {
           role: 'user',
@@ -145,8 +155,9 @@ MARKET CAP: ${subject.marketCap ? `$${(subject.marketCap / 1000).toFixed(1)}B` :
 PROFITABLE: ${subject.pe != null && subject.pe > 0 ? 'Yes' : 'No/unclear'}
 REVENUE GROWTH YOY: ${subject.revenueGrowth != null ? `${subject.revenueGrowth.toFixed(1)}%` : '—'}
 GROSS MARGIN: ${subject.grossMargin != null ? `${subject.grossMargin.toFixed(1)}%` : '—'}
+DEBT/EQUITY: ${subject.debtEquity != null ? subject.debtEquity.toFixed(2) : '—'}
 
-FINNHUB PEERS:
+FINNHUB PEERS (assess each against the 5 criteria):
 ${peerListText || 'No peers returned.'}`,
         },
       ],
@@ -163,12 +174,16 @@ ${peerListText || 'No peers returned.'}`,
   let finalPeerSymbols: string[]
 
   if (aiInsights) {
+    // Hard threshold: score < 5 is always dropped, regardless of the keep field GPT returned
+    for (const p of aiInsights.peerAssessments) {
+      p.keep = p.score >= 5
+    }
     const kept = aiInsights.peerAssessments.filter(p => p.keep).map(p => p.symbol)
-    const added = aiInsights.suggestedAdditions ?? []
+    const added = (aiInsights.suggestedAdditions ?? []).filter(s => s !== sym)
     // Mark AI-added peers in assessments for client transparency
     for (const sym of added) {
       if (!aiInsights.peerAssessments.find(p => p.symbol === sym)) {
-        aiInsights.peerAssessments.push({ symbol: sym, score: 8, keep: true, reason: 'Suggested by Graham as a closer comparable', aiAdded: true })
+        aiInsights.peerAssessments.push({ symbol: sym, score: 8, keep: true, reason: 'Suggested as replacement for a below-threshold Finnhub peer', aiAdded: true })
       }
     }
     finalPeerSymbols = [...new Set([...kept, ...added])].slice(0, 8)
