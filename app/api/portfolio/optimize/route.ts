@@ -20,7 +20,13 @@ const OBJECTIVES: Objective[] = [
 type AdjSeries = Awaited<ReturnType<typeof fetchAdjCloseSeries>>
 
 export async function POST(request: NextRequest) {
-  let body: { symbols?: string[]; objective?: string; rfAnnual?: number; years?: number }
+  let body: {
+    symbols?: string[]
+    objective?: string
+    rfAnnual?: number
+    years?: number
+    minOnePercentEach?: unknown
+  }
   try {
     body = await request.json()
   } catch {
@@ -36,7 +42,7 @@ export async function POST(request: NextRequest) {
   const symbols = raw
     .map(s => String(s).trim().toUpperCase())
     .filter(s => {
-      if (!/^[A-Z0-9.\-]+$/.test(s) || s.length > 12) return false
+      if (!/^[A-Z0-9.\-]+$/.test(s) || s.length > 20) return false
       if (seen.has(s)) return false
       seen.add(s)
       return true
@@ -48,6 +54,17 @@ export async function POST(request: NextRequest) {
 
   if (symbols.length > 48) {
     return NextResponse.json({ error: 'Maximum 48 tickers per basket.' }, { status: 400 })
+  }
+
+  const minOnePercentEach = body.minOnePercentEach === true || body.minOnePercentEach === 'true'
+  if (minOnePercentEach && symbols.length > 100) {
+    return NextResponse.json(
+      {
+        error:
+          'At least 1% in every holding needs at most 100 names (1% × 100 = 100%). Remove some tickers or turn this option off.',
+      },
+      { status: 422 }
+    )
   }
 
   const objective = (body.objective ?? 'max_sharpe') as Objective
@@ -119,7 +136,22 @@ export async function POST(request: NextRequest) {
   }
   const R_only = R.map(row => userCols.map(j => row[j]))
 
-  const result = runOptimize(R_only, symbols, objective, rfAnnual)
+  let result: ReturnType<typeof runOptimize>
+  try {
+    result = runOptimize(R_only, symbols, objective, rfAnnual, minOnePercentEach ? 0.01 : 0)
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : ''
+    if (msg === 'MIN_WEIGHT_INFEASIBLE') {
+      return NextResponse.json(
+        {
+          error:
+            'Cannot give every holding at least 1% with this basket size. Remove some tickers or turn off “at least 1% each”.',
+        },
+        { status: 422 }
+      )
+    }
+    throw e
+  }
 
   const benchmarkComparisons = BENCHMARK_ETFS.map(({ symbol: sym, name }) => {
     const j = colSyms.indexOf(sym)
