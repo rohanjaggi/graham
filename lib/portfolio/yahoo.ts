@@ -1,7 +1,13 @@
 /** Yahoo Finance chart API — adjusted closes for return series (no API key). */
 
+/**
+ * Yahoo chart symbols: keep exchange suffixes (VOD.L, AIR.PA, 7203.T); US multi-class tickers use hyphen (BRK-B).
+ */
 export function toYahooSymbol(symbol: string): string {
-  return symbol.trim().toUpperCase().replace(/\./g, '-')
+  const s = symbol.trim().toUpperCase()
+  const m = /^(.+)\.([A-Z])$/.exec(s)
+  if (m && (m[2] === 'A' || m[2] === 'B')) return `${m[1]}-${m[2]}`
+  return s
 }
 
 type Point = { t: number; adj: number }
