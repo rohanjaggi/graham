@@ -13,12 +13,23 @@ export async function GET(request: NextRequest) {
   )
   const data = await res.json()
 
-  // Filter to US equities and common stocks only, return first 8
+  /** Finnhub equity-like types; allow exchange-qualified symbols (e.g. VOD.L, AIR.PA, 7203.T). */
+  function isEquityListing(r: { type?: string; symbol?: string }): boolean {
+    const sym = (r.symbol ?? '').trim()
+    if (!sym) return false
+    const t = (r.type ?? '').trim()
+    const low = t.toLowerCase()
+    if (/etf\b|etp\b|mutual fund|closed-end fund|bond\b|\bcrypto\b|\bcurrency\b|commodity\b/.test(low)) return false
+    if (low === 'common stock' || low === 'adr' || low === 'preferred stock') return true
+    if (/depositary receipt/i.test(t)) return true
+    if (low.includes('stock') && !/\betf\b/.test(low)) return true
+    if (/ordinary|equity share/i.test(low)) return true
+    return false
+  }
+
   const results = (data.result ?? [])
-    .filter((r: { type: string; symbol: string }) =>
-      r.type === 'Common Stock' && !r.symbol.includes('.')
-    )
-    .slice(0, 8)
+    .filter((r: { type: string; symbol: string }) => isEquityListing(r))
+    .slice(0, 12)
     .map((r: { symbol: string; description: string; type: string }) => ({
       symbol: r.symbol,
       description: r.description,
