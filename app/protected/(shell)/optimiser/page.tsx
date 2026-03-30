@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 const OBJECTIVES: { id: string; label: string; hint: string }[] = [
   { id: 'max_sharpe', label: 'Maximise Sharpe ratio', hint: 'Risk adjusted return vs volatility (excess return / σ), annualised.' },
@@ -23,6 +23,7 @@ type OptimizeResponse = {
   objective: string
   metrics: MetricBlock
   sample: { tradingDays: number; rfAnnualPct: number }
+  minWeightPct?: number
   lookbackYears?: number
   dataSource?: string
   benchmarkComparisons?: { symbol: string; name: string; metrics: MetricBlock }[]
@@ -30,36 +31,111 @@ type OptimizeResponse = {
   error?: string
 }
 
+type SearchHit = { symbol: string; description: string }
+
+const INITIAL_TICKERS = ['GOOGL', 'MSFT', 'META']
+
 export default function OptimiserPage() {
-  const [input, setInput] = useState('')
-  const [tickers, setTickers] = useState<string[]>(['GOOGL', 'MSFT', 'META'])
+  const [tickers, setTickers] = useState<string[]>(() => [...INITIAL_TICKERS])
+  const [basketQuery, setBasketQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<SearchHit[]>([])
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchLoading, setSearchLoading] = useState(false)
+  const [searchError, setSearchError] = useState('')
+  const basketSearchRef = useRef<HTMLDivElement>(null)
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   const [objective, setObjective] = useState('max_sharpe')
+  const [minOnePercentEach, setMinOnePercentEach] = useState(false)
   const [years, setYears] = useState(5)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [result, setResult] = useState<OptimizeResponse | null>(null)
 
-  function normalizeSymbol(raw: string): string | null {
-    const s = raw.trim().toUpperCase().replace(/\s+/g, '')
-    if (!s || !/^[A-Z0-9.\-]+$/.test(s) || s.length > 12) return null
-    return s
-  }
+  useEffect(() => {
+    function onDocMouseDown(e: MouseEvent) {
+      if (basketSearchRef.current && !basketSearchRef.current.contains(e.target as Node)) {
+        setSearchOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onDocMouseDown)
+    return () => document.removeEventListener('mousedown', onDocMouseDown)
+  }, [])
 
-  function addTicker() {
-    const sym = normalizeSymbol(input)
-    setError('')
-    if (!sym) return
-    if (tickers.includes(sym)) {
-      setInput('')
+  useEffect(() => {
+    setSearchError('')
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current)
+    const q = basketQuery.trim()
+    if (q.length < 1) {
+      setSearchResults([])
+      setSearchLoading(false)
+      setSearchOpen(false)
+      setSearchError('')
       return
     }
-    setTickers([...tickers, sym])
-    setInput('')
+    searchDebounceRef.current = setTimeout(async () => {
+      setSearchLoading(true)
+      try {
+        const res = await fetch(`/api/ticker/search?q=${encodeURIComponent(q)}`)
+        const data = await res.json()
+        if (!res.ok) {
+          setSearchResults([])
+          setSearchError(typeof data?.error === 'string' ? data.error : 'Search unavailable.')
+          setSearchOpen(true)
+          return
+        }
+        if (Array.isArray(data)) {
+          setSearchResults(data)
+          setSearchOpen(data.length > 0)
+        } else {
+          setSearchResults([])
+          setSearchOpen(false)
+        }
+      } catch {
+        setSearchResults([])
+        setSearchError('Search failed.')
+        setSearchOpen(true)
+      } finally {
+        setSearchLoading(false)
+      }
+    }, 280)
+    return () => {
+      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current)
+    }
+  }, [basketQuery])
+
+  function addTickerFromSearch(symbol: string) {
+    setError('')
+    const sym = symbol.toUpperCase()
+    if (tickers.includes(sym)) {
+      setBasketQuery('')
+      setSearchResults([])
+      setSearchOpen(false)
+      return
+    }
+    setTickers(t => [...t, sym])
+    setBasketQuery('')
+    setSearchResults([])
+    setSearchOpen(false)
   }
 
   function removeTicker(sym: string) {
     setTickers(tickers.filter(t => t !== sym))
     setError('')
+  }
+
+  function resetOptimiser() {
+    setTickers([...INITIAL_TICKERS])
+    setBasketQuery('')
+    setSearchResults([])
+    setSearchOpen(false)
+    setSearchError('')
+    setObjective('max_sharpe')
+    setMinOnePercentEach(false)
+    setYears(5)
+    setError('')
+    setResult(null)
+    setLoading(false)
   }
 
   async function runOptimize() {
@@ -74,7 +150,7 @@ export default function OptimiserPage() {
       const res = await fetch('/api/portfolio/optimize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ symbols: tickers, objective, years }),
+        body: JSON.stringify({ symbols: tickers, objective, years, minOnePercentEach }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -96,9 +172,9 @@ export default function OptimiserPage() {
       <div>
         <div style={{ fontSize: 10.5, color: 'var(--gold)', letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 10 }}>Portfolio</div>
         <h1 className="font-display" style={{ fontSize: 32, fontWeight: 500, letterSpacing: '-0.02em', marginBottom: 8 }}>
-          Mean–variance optimiser
+          Portfolio Allocation Optimiser
         </h1>
-        <p style={{ fontSize: 13.5, color: 'var(--text-muted)', lineHeight: 1.65, maxWidth: 640 }}>
+        <p style={{ fontSize: 13.5, color: 'var(--text-muted)', lineHeight: 1.65, maxWidth: 1000 }}>
           Add the stocks you care about, set how far back you want to look (<strong style={{ color: 'var(--text-secondary)' }}>1–5 years</strong>), and pick what you’d like to optimise for, such as Sharpe, Sortino, return, volatility, or drawdowns.
           Graham studies <strong style={{ color: 'var(--text-secondary)' }}>daily price history</strong> over that window and suggests <strong style={{ color: 'var(--gold)' }}>how much to allocate to each holding</strong> so the weights add up to <strong style={{ color: 'var(--gold)' }}>100%</strong> (long-only: no betting against stocks).
           For Sharpe and Sortino we use a <strong style={{ color: 'var(--text-secondary)' }}>4%</strong> annual risk-free rate.
@@ -178,7 +254,10 @@ export default function OptimiserPage() {
 
       <div className="card" style={{ padding: '24px 26px' }}>
         <div style={{ fontSize: 10.5, color: 'var(--text-muted)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 14 }}>Basket</div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14, minHeight: 36 }}>
+        <p style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 14, lineHeight: 1.55 }}>
+          Search by ticker or company name, then choose a match from the list. Only symbols returned by the search can be added, so each name is checked against live market data.
+        </p>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16, minHeight: tickers.length ? undefined : 8 }}>
           {tickers.map(sym => (
             <button
               key={sym}
@@ -196,18 +275,75 @@ export default function OptimiserPage() {
             </button>
           ))}
         </div>
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        <div ref={basketSearchRef} style={{ position: 'relative' }}>
+          <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: searchLoading ? 'var(--gold)' : 'var(--text-muted)', fontSize: 14, pointerEvents: 'none' }}>
+            ⌕
+          </span>
           <input
             className="input-dark"
-            placeholder="Ticker e.g. BRK.B, GOOGL…"
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') addTicker() }}
-            style={{ flex: 1, minWidth: 200 }}
+            placeholder="Search ticker or company to add…"
+            value={basketQuery}
+            onChange={e => setBasketQuery(e.target.value)}
+            onFocus={() => { if (searchResults.length > 0 && !searchError) setSearchOpen(true) }}
+            onKeyDown={e => { if (e.key === 'Escape') { setSearchOpen(false); setBasketQuery('') } }}
+            autoComplete="off"
+            aria-expanded={searchOpen}
+            aria-controls="basket-search-listbox"
+            aria-haspopup="listbox"
+            style={{ paddingLeft: 36, width: '100%', boxSizing: 'border-box' }}
           />
-          <button type="button" className="btn-ghost" onClick={addTicker} style={{ padding: '10px 18px' }}>
-            Add
-          </button>
+          {searchOpen && (searchResults.length > 0 || searchError) && (
+            <div
+              id="basket-search-listbox"
+              role="listbox"
+              style={{
+                position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0, zIndex: 50,
+                background: 'var(--bg-surface)', border: '1px solid var(--border-bright)',
+                borderRadius: 10, overflow: 'hidden', maxHeight: 280, overflowY: 'auto',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+              }}
+            >
+              {searchError ? (
+                <div style={{ padding: '14px 16px', fontSize: 12.5, color: 'var(--red)' }}>{searchError}</div>
+              ) : (
+                searchResults.map((r, i) => {
+                  const inBasket = tickers.includes(r.symbol)
+                  return (
+                    <button
+                      key={`${r.symbol}-${i}`}
+                      type="button"
+                      role="option"
+                      disabled={inBasket}
+                      onClick={() => !inBasket && addTickerFromSearch(r.symbol)}
+                      style={{
+                        width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '10px 16px', background: 'none', border: 'none', cursor: inBasket ? 'default' : 'pointer',
+                        borderBottom: i < searchResults.length - 1 ? '1px solid var(--border)' : 'none',
+                        fontFamily: "'DM Sans', sans-serif",
+                        textAlign: 'left',
+                        opacity: inBasket ? 0.45 : 1,
+                      }}
+                      onMouseEnter={e => { if (!inBasket) (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-elevated)' }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'none' }}
+                    >
+                      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--gold)', minWidth: 56 }}>{r.symbol}</span>
+                      <span style={{ fontSize: 12.5, color: 'var(--text-secondary)', flex: 1, paddingLeft: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {r.description}
+                      </span>
+                      {inBasket ? (
+                        <span style={{ fontSize: 10.5, color: 'var(--text-muted)', marginLeft: 8 }}>In basket</span>
+                      ) : (
+                        <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 8 }}>Add</span>
+                      )}
+                    </button>
+                  )
+                })
+              )}
+            </div>
+          )}
+          {!searchLoading && basketQuery.trim().length > 0 && searchResults.length === 0 && !searchError && (
+            <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-muted)' }}>No equity listings matched. Try another spelling, exchange code, or symbol.</div>
+          )}
         </div>
       </div>
 
@@ -238,9 +374,30 @@ export default function OptimiserPage() {
             </label>
           ))}
         </div>
+        <label
+          style={{
+            display: 'flex', gap: 12, alignItems: 'flex-start', cursor: 'pointer',
+            marginTop: 16, padding: '12px 14px', borderRadius: 10,
+            border: minOnePercentEach ? '1px solid var(--gold-dim)' : '1px solid var(--border)',
+            background: minOnePercentEach ? 'rgba(200,169,110,0.08)' : 'var(--bg-elevated)',
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={minOnePercentEach}
+            onChange={e => setMinOnePercentEach(e.target.checked)}
+            style={{ marginTop: 3 }}
+          />
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-primary)' }}>Require all stocks to be in basket</div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4, lineHeight: 1.5 }}>
+              Gives each ticker at least 1% so none are optimised away to zero (long-only; weights still sum to 100%). Not possible with more than 100 names.
+            </div>
+          </div>
+        </label>
       </div>
 
-      <div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12 }}>
         <button
           type="button"
           className="btn-gold"
@@ -249,6 +406,14 @@ export default function OptimiserPage() {
           style={{ padding: '12px 28px', fontSize: 14, opacity: loading || tickers.length < 2 ? 0.6 : 1 }}
         >
           {loading ? 'Running optimisation…' : 'Compute allocation'}
+        </button>
+        <button
+          type="button"
+          className="btn-ghost"
+          onClick={resetOptimiser}
+          style={{ padding: '12px 24px', fontSize: 14 }}
+        >
+          Reset
         </button>
       </div>
 
@@ -279,6 +444,11 @@ export default function OptimiserPage() {
           </table>
           <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 20 }}>
             Weights sum to <strong style={{ color: 'var(--text-primary)' }}>{sumPct != null ? sumPct.toFixed(2) : '—'}%</strong> (rounded to 4 decimals; last bucket adjusted so total = 100%).
+            {typeof result.minWeightPct === 'number' && (
+              <span style={{ display: 'block', marginTop: 8 }}>
+                Floor applied: each holding at least <strong style={{ color: 'var(--text-primary)' }}>{result.minWeightPct.toFixed(0)}%</strong> before display rounding.
+              </span>
+            )}
           </div>
 
           <div style={{ fontSize: 10.5, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 12 }}>Implied sample metrics (historical)</div>
