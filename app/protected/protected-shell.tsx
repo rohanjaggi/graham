@@ -8,7 +8,7 @@ import { createClient } from '@/lib/supabase/client'
 type NavItem = { label: string; href?: string }
 
 const NAV: { section: string; items: NavItem[] }[] = [
-  { section: 'ANALYSIS',  items: [{ label: 'Overview', href: '/protected' }, { label: 'Research' }, { label: 'Technical' }] },
+  { section: 'ANALYSIS',  items: [{ label: 'Overview', href: '/protected' }, { label: 'Research', href: '/protected/qa' }, { label: 'Technical' }] },
   { section: 'VALUATION', items: [{ label: 'Valuation', href: '/protected/valuation' }] },
   { section: 'PORTFOLIO', items: [{ label: 'Optimiser', href: '/protected/optimiser' }, { label: 'Tail Risk' }] },
 ]
@@ -94,6 +94,7 @@ const FALLBACK_INDICES = [
 
 type IndexItem = { label: string; val: string; chg: string; up: boolean }
 type SearchResult = { symbol: string; description: string }
+const TICKER_PATTERN = /^[A-Z][A-Z0-9.-]{0,9}$/
 
 function TopBar() {
   const router = useRouter()
@@ -109,10 +110,17 @@ function TopBar() {
 
   useEffect(() => {
     const supabase = createClient()
-    supabase.auth.getUser().then(({ data }) => {
-      if (!data.user) return
-      const meta = data.user.user_metadata
-      const name = meta?.first_name || meta?.full_name?.split(' ')[0] || data.user.email?.split('@')[0] || 'User'
+    supabase.auth.getUser().then((response: {
+      data: {
+        user: {
+          user_metadata?: { first_name?: string; full_name?: string }
+          email?: string
+        } | null
+      }
+    }) => {
+      if (!response.data.user) return
+      const meta = response.data.user.user_metadata
+      const name = meta?.first_name || meta?.full_name?.split(' ')[0] || response.data.user.email?.split('@')[0] || 'User'
       setDisplayName(name)
       setInitial(name[0].toUpperCase())
     })
@@ -166,6 +174,28 @@ function TopBar() {
     router.push(`/protected/ticker/${symbol}`)
   }
 
+  async function handleSubmitSearch(rawQuery: string) {
+    const trimmed = rawQuery.trim()
+    if (!trimmed) return
+
+    const uppercase = trimmed.toUpperCase()
+    if (TICKER_PATTERN.test(uppercase)) {
+      handleSelect(uppercase)
+      return
+    }
+
+    const ranked = results.length > 0
+      ? results
+      : await fetch(`/api/ticker/search?q=${encodeURIComponent(trimmed)}`)
+          .then((response) => response.ok ? response.json() : [])
+          .catch(() => [])
+
+    const best = Array.isArray(ranked) ? ranked.find((item): item is SearchResult => typeof item?.symbol === 'string') : null
+    if (best) {
+      handleSelect(best.symbol)
+    }
+  }
+
   async function handleSignOut() {
     const supabase = createClient()
     await supabase.auth.signOut()
@@ -183,10 +213,16 @@ function TopBar() {
         <input
           className="input-dark"
           style={{ paddingLeft: 36 }}
-          placeholder="Search ticker or company…"
+          placeholder="Search ticker, company, or plain-English phrase…"
           value={query}
           onChange={handleQueryChange}
-          onKeyDown={e => { if (e.key === 'Escape') { setOpen(false); setQuery('') } }}
+          onKeyDown={e => {
+            if (e.key === 'Escape') { setOpen(false); setQuery('') }
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              void handleSubmitSearch(query)
+            }
+          }}
           onFocus={() => { if (results.length > 0) setOpen(true) }}
           autoComplete="off"
         />

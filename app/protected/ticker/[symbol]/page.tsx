@@ -55,7 +55,7 @@ function fmtDate(unix: number): string {
 /* ─── SIDEBAR ─────────────────────────────────────────────────────────────── */
 
 const NAV = [
-  { section: 'ANALYSIS',  items: [{ label: 'Overview', href: '/protected' }, { label: 'Research' }, { label: 'Technical' }] },
+  { section: 'ANALYSIS',  items: [{ label: 'Overview', href: '/protected' }, { label: 'Research', href: '/protected/qa' }, { label: 'Technical' }] },
   { section: 'VALUATION', items: [{ label: 'Valuation', href: '/protected/valuation' }] },
   { section: 'PORTFOLIO', items: [{ label: 'Optimiser', href: '/protected/optimiser' }, { label: 'Tail Risk' }] },
 ]

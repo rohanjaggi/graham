@@ -264,6 +264,13 @@ function OverviewPanel() {
               </Link>
             )
           }
+          if (c.title === 'Qualitative Research') {
+            return (
+              <Link key={i} href="/protected/qa" style={{ textDecoration: 'none', color: 'inherit' }}>
+                {card}
+              </Link>
+            )
+          }
           return <div key={i}>{card}</div>
         })}
       </div>

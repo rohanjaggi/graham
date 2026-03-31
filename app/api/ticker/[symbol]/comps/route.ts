@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
 import { createClient } from '@/lib/supabase/server'
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+function getOpenAIClient() {
+  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+}
 
 /* ─── TYPES ──────────────────────────────────────────────────────────────── */
 
@@ -111,7 +113,7 @@ export async function GET(
   const peerListText = rawPeerMeta.map(p => `${p.symbol} — ${p.name} (${p.sector})`).join('\n')
 
   try {
-    const completion = await openai.chat.completions.create({
+    const completion = await getOpenAIClient().chat.completions.create({
       model: 'gpt-5.4-mini',
       response_format: { type: 'json_object' },
       temperature: 0.1,
