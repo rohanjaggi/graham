@@ -34,6 +34,28 @@ interface TickerData {
   news: { headline: string; source: string; datetime: number; url: string; summary: string }[]
 }
 
+interface CompanySummaryResponse {
+  summary?: string
+  whatItIs?: string
+  companyDescription?: string
+  crisisRelevance?: string
+  keyVulnerabilities?: string[]
+  transmissionChannels?: string[]
+  whatToExploreNext?: string[]
+}
+
+type RiskLevel = 'Low' | 'Medium' | 'High'
+
+interface CrisisHeuristics {
+  fundingRisk: RiskLevel
+  liquidityRisk: RiskLevel
+  counterpartyRisk: RiskLevel
+  sentimentSensitivity: RiskLevel
+  interconnectedness: RiskLevel
+  confidenceLevel: RiskLevel
+  exposureCategories: string[]
+}
+
 /* ─── HELPERS ─────────────────────────────────────────────────────────────── */
 
 function fmt(n: number | null, decimals = 2, suffix = ''): string {
@@ -52,10 +74,144 @@ function fmtDate(unix: number): string {
   return new Date(unix * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
+function scoreToLevel(score: number): RiskLevel {
+  if (score >= 7) return 'High'
+  if (score >= 4) return 'Medium'
+  return 'Low'
+}
+
+function confidenceFromCoverage(totalItems: number): RiskLevel {
+  if (totalItems >= 8) return 'High'
+  if (totalItems >= 4) return 'Medium'
+  return 'Low'
+}
+
+function bucketByKeyword(items: string[], mappings: Array<{ label: string; re: RegExp }>): string[] {
+  const labels = new Set<string>()
+  for (const item of items) {
+    for (const mapping of mappings) {
+      if (mapping.re.test(item)) labels.add(mapping.label)
+    }
+  }
+  return Array.from(labels)
+}
+
+function getCrisisHeuristics(
+  data: TickerData,
+  vulnerabilities: string[],
+  channels: string[],
+  nextSteps: string[]
+): CrisisHeuristics {
+  const fundingScore = (() => {
+    let score = 3
+    const de = data.debtEquity ?? 0
+    const growth = data.revenueGrowth ?? 0
+    if (de > 2) score += 4
+    else if (de > 1) score += 2
+    if (growth < 0) score += 1
+    if (/financial|bank|insurance|real estate/i.test(data.sector || '')) score += 1
+    return Math.min(10, score)
+  })()
+
+  const liquidityScore = (() => {
+    let score = 3
+    const absMove = Math.abs(data.priceChangePct ?? 0)
+    const de = data.debtEquity ?? 0
+    if (absMove > 5) score += 2
+    if (de > 2) score += 2
+    if ((data.marketCap ?? 0) < 10_000) score += 1
+    if (/funding|liquidity|refinanc/i.test(vulnerabilities.join(' '))) score += 1
+    return Math.min(10, score)
+  })()
+
+  const counterpartyScore = (() => {
+    let score = 3
+    const text = `${vulnerabilities.join(' ')} ${channels.join(' ')}`
+    if (/counterparty|interbank|credit|derivative|broker|dealer/i.test(text)) score += 4
+    if (/financial|bank|insurance/i.test(data.sector || '')) score += 2
+    return Math.min(10, score)
+  })()
+
+  const sentimentScore = (() => {
+    let score = 3
+    const absMove = Math.abs(data.priceChangePct ?? 0)
+    if (absMove > 6) score += 4
+    else if (absMove > 3) score += 2
+    if ((data.marketCap ?? 0) > 250_000) score += 1
+    if (/news|sentiment|confidence|volatility/i.test(channels.join(' '))) score += 1
+    return Math.min(10, score)
+  })()
+
+  const interconnectednessScore = (() => {
+    let score = 3
+    const text = `${channels.join(' ')} ${nextSteps.join(' ')}`
+    if (/contagion|transmission|supply chain|counterparty|system|interconnect/i.test(text)) score += 3
+    if ((data.marketCap ?? 0) > 500_000) score += 2
+    if (/financial|technology|energy|healthcare/i.test(data.sector || '')) score += 1
+    return Math.min(10, score)
+  })()
+
+  const exposureMatches = bucketByKeyword(
+    [...vulnerabilities, ...channels, ...nextSteps],
+    [
+      { label: 'Funding liabilities', re: /funding|refinanc|maturity|short-term/i },
+      { label: 'Credit exposures', re: /credit|default|counterparty|interbank/i },
+      { label: 'Trading assets', re: /trading|mark-to-market|market contagion|asset price/i },
+      { label: 'Derivatives', re: /derivative|hedg/i },
+      { label: 'Consumer demand', re: /consumer|spending|retail/i },
+      { label: 'Enterprise spending', re: /enterprise|business spend|capex/i },
+      { label: 'Cloud and infrastructure', re: /cloud|infrastructure|data center/i },
+      { label: 'Regulatory sensitivity', re: /regulator|policy|compliance|legal/i },
+      { label: 'Global supply chain', re: /supply chain|logistics|geopolit/i },
+    ]
+  )
+
+  const fallbackBySector = /financial|bank|insurance/i.test(data.sector || '')
+    ? ['Funding liabilities', 'Credit exposures', 'Trading assets', 'Derivatives']
+    : /technology/i.test(data.sector || '')
+      ? ['Enterprise spending', 'Cloud and infrastructure', 'Consumer demand', 'Regulatory sensitivity']
+      : ['Consumer demand', 'Global supply chain', 'Regulatory sensitivity']
+
+  const exposureCategories = (exposureMatches.length > 0 ? exposureMatches : fallbackBySector).slice(0, 4)
+  const coverage = vulnerabilities.length + channels.length + nextSteps.length
+
+  return {
+    fundingRisk: scoreToLevel(fundingScore),
+    liquidityRisk: scoreToLevel(liquidityScore),
+    counterpartyRisk: scoreToLevel(counterpartyScore),
+    sentimentSensitivity: scoreToLevel(sentimentScore),
+    interconnectedness: scoreToLevel(interconnectednessScore),
+    confidenceLevel: confidenceFromCoverage(coverage),
+    exposureCategories,
+  }
+}
+
+function riskBadgeStyle(level: RiskLevel): React.CSSProperties {
+  if (level === 'High') {
+    return {
+      color: '#ff88a0',
+      background: 'rgba(240, 96, 112, 0.14)',
+      border: '1px solid rgba(240, 96, 112, 0.36)',
+    }
+  }
+  if (level === 'Medium') {
+    return {
+      color: '#e4c27a',
+      background: 'rgba(212, 180, 117, 0.16)',
+      border: '1px solid rgba(212, 180, 117, 0.34)',
+    }
+  }
+  return {
+    color: '#78cda1',
+    background: 'rgba(61, 214, 140, 0.14)',
+    border: '1px solid rgba(61, 214, 140, 0.3)',
+  }
+}
+
 /* ─── SIDEBAR ─────────────────────────────────────────────────────────────── */
 
 const NAV = [
-  { section: 'ANALYSIS',  items: [{ label: 'Overview', href: '/protected' }, { label: 'Research', href: '/protected/qa' }, { label: 'Technical' }] },
+  { section: 'ANALYSIS',  items: [{ label: 'Overview', href: '/protected' }, { label: 'Research', href: '/protected/research' }, { label: 'Technical' }] },
   { section: 'VALUATION', items: [{ label: 'Valuation', href: '/protected/valuation' }] },
   { section: 'PORTFOLIO', items: [{ label: 'Optimiser', href: '/protected/optimiser' }, { label: 'Tail Risk' }] },
 ]
@@ -399,6 +555,17 @@ export default function TickerPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [tab, setTab] = useState<'overview' | 'financials' | 'news' | 'analysis'>('overview')
+  const [companySummary, setCompanySummary] = useState('')
+  const [companyWhatItIs, setCompanyWhatItIs] = useState('')
+  const [companyDescription, setCompanyDescription] = useState('')
+  const [companyCrisisRelevance, setCompanyCrisisRelevance] = useState('')
+  const [companyKeyVulnerabilities, setCompanyKeyVulnerabilities] = useState<string[]>([])
+  const [companyTransmissionChannels, setCompanyTransmissionChannels] = useState<string[]>([])
+  const [companyWhatToExploreNext, setCompanyWhatToExploreNext] = useState<string[]>([])
+  const [summaryLoading, setSummaryLoading] = useState(false)
+  const [isSaved, setIsSaved] = useState(false)
+  const [saveLoading, setSaveLoading] = useState(false)
+  const [saveFeedback, setSaveFeedback] = useState('')
 
   // Analysis tab state
   const [analysis, setAnalysis] = useState<Record<string, unknown> | null>(null)
@@ -419,6 +586,70 @@ export default function TickerPage() {
   }, [symbol])
 
   useEffect(() => {
+    if (!symbol) return
+    setSummaryLoading(true)
+    setCompanySummary('')
+    setCompanyWhatItIs('')
+    setCompanyDescription('')
+    setCompanyCrisisRelevance('')
+    setCompanyKeyVulnerabilities([])
+    setCompanyTransmissionChannels([])
+    setCompanyWhatToExploreNext([])
+    fetch(`/api/ticker/${symbol}/summary`)
+      .then(r => r.ok ? r.json() : null)
+      .then((d: CompanySummaryResponse | null) => {
+        const summary = d?.summary?.trim() ?? ''
+        const whatItIs = d?.whatItIs?.trim() ?? ''
+        const description = d?.companyDescription?.trim() ?? ''
+        const crisisRelevance = d?.crisisRelevance?.trim() ?? ''
+        const keyVulnerabilities = Array.isArray(d?.keyVulnerabilities)
+          ? d.keyVulnerabilities.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+          : []
+        const transmissionChannels = Array.isArray(d?.transmissionChannels)
+          ? d.transmissionChannels.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+          : []
+        const whatToExploreNext = Array.isArray(d?.whatToExploreNext)
+          ? d.whatToExploreNext.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+          : []
+
+        setCompanySummary(summary)
+        setCompanyWhatItIs(whatItIs || summary)
+        setCompanyDescription(description)
+        setCompanyCrisisRelevance(
+          crisisRelevance ||
+          'Crisis relevance details are currently limited; review this company with sector-level and balance-sheet context in stressed markets.'
+        )
+        setCompanyKeyVulnerabilities(keyVulnerabilities)
+        setCompanyTransmissionChannels(transmissionChannels)
+        setCompanyWhatToExploreNext(whatToExploreNext)
+        setSummaryLoading(false)
+      })
+      .catch(() => setSummaryLoading(false))
+  }, [symbol])
+
+  useEffect(() => {
+    if (!symbol) return
+    let cancelled = false
+
+    setIsSaved(false)
+    setSaveFeedback('')
+    fetch('/api/profile/saved-tickers')
+      .then(r => r.ok ? r.json() : [])
+      .then((saved) => {
+        if (cancelled || !Array.isArray(saved)) return
+        const found = saved.some((item) => typeof item?.symbol === 'string' && item.symbol.toUpperCase() === symbol)
+        setIsSaved(found)
+      })
+      .catch(() => {
+        if (!cancelled) setIsSaved(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [symbol])
+
+  useEffect(() => {
     if (tab !== 'analysis' || analysis || analysisLoading) return
     setAnalysisLoading(true)
     setAnalysisError('')
@@ -431,7 +662,60 @@ export default function TickerPage() {
       .catch(e => { setAnalysisError(e.message); setAnalysisLoading(false) })
   }, [tab, symbol, analysis, analysisLoading])
 
+  async function handleSaveTicker() {
+    if (!symbol || saveLoading) return
+    setSaveLoading(true)
+    setSaveFeedback('')
+
+    try {
+      const response = isSaved
+        ? await fetch('/api/profile/saved-tickers', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ symbol }),
+          })
+        : await fetch('/api/profile/saved-tickers', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ symbol, companyName: data?.name ?? null }),
+          })
+
+      const payload = await response.json().catch(() => null)
+
+      if (!response.ok) {
+        const reason = typeof payload?.error === 'string'
+          ? payload.error
+          : isSaved
+            ? 'Could not remove ticker right now.'
+            : 'Could not save ticker right now.'
+        setSaveFeedback(reason)
+        return
+      }
+
+      setIsSaved(!isSaved)
+      setSaveFeedback(
+        typeof payload?.message === 'string'
+          ? payload.message
+          : isSaved
+            ? 'Removed from your profile.'
+            : 'Saved to your profile.'
+      )
+    } catch {
+      setSaveFeedback(isSaved ? 'Could not remove ticker right now.' : 'Could not save ticker right now.')
+    } finally {
+      setSaveLoading(false)
+    }
+  }
+
   const up = (data?.priceChangePct ?? 0) >= 0
+  const heuristics = data
+    ? getCrisisHeuristics(
+        data,
+        companyKeyVulnerabilities,
+        companyTransmissionChannels,
+        companyWhatToExploreNext
+      )
+    : null
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', fontFamily: "'DM Sans', sans-serif" }}>
@@ -489,6 +773,22 @@ export default function TickerPage() {
                 </div>
               </div>
               <div style={{ textAlign: 'right' }}>
+                <button
+                  type="button"
+                  className={isSaved ? 'btn-ghost' : 'btn-gold'}
+                  onClick={() => void handleSaveTicker()}
+                  disabled={saveLoading}
+                  style={{
+                    marginBottom: 10,
+                    minWidth: 94,
+                    padding: '6px 12px',
+                    fontSize: 12,
+                    cursor: saveLoading ? 'default' : 'pointer',
+                    opacity: saveLoading ? 0.75 : 1,
+                  }}
+                >
+                  {saveLoading ? (isSaved ? 'Unsaving...' : 'Saving...') : isSaved ? 'Unsave' : 'Save'}
+                </button>
                 <div style={{ fontSize: 36, fontWeight: 600, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
                   ${fmt(data.price)}
                 </div>
@@ -498,6 +798,11 @@ export default function TickerPage() {
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
                   Mkt Cap {fmtMarketCap(data.marketCap)}
                 </div>
+                {saveFeedback && (
+                  <div style={{ fontSize: 11, color: isSaved ? 'var(--green)' : 'var(--red)', marginTop: 6 }}>
+                    {saveFeedback}
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -533,13 +838,6 @@ export default function TickerPage() {
             </div>
           )}
 
-          {/* Price chart — always visible once loaded */}
-          {!loading && !error && data && (
-            <div style={{ marginBottom: 24 }}>
-              <PriceChart symbol={symbol} />
-            </div>
-          )}
-
           {/* Error state */}
           {!loading && error && (
             <div className="card" style={{ padding: '40px', textAlign: 'center', maxWidth: 480, margin: '60px auto' }}>
@@ -553,6 +851,98 @@ export default function TickerPage() {
           {/* ── OVERVIEW TAB ── */}
           {!loading && !error && data && tab === 'overview' && (
             <div className="animate-fade-up" style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+
+              {(summaryLoading || companySummary || companyWhatItIs || companyCrisisRelevance) && (
+                <div className="card" style={{ padding: '18px 20px' }}>
+                  <div style={{ fontSize: 10.5, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>
+                    Quick analysis
+                  </div>
+                  {summaryLoading ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <Skeleton w="100%" h={12} />
+                      <Skeleton w="84%" h={12} />
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12, marginTop: 8 }}>
+                        {[...Array(3)].map((_, i) => (
+                          <div key={i} style={{ border: '1px solid var(--border)', background: 'var(--bg-elevated)', borderRadius: 10, padding: '12px 14px' }}>
+                            <Skeleton w="70%" h={10} />
+                            <div style={{ height: 8 }} />
+                            <Skeleton w="100%" h={10} />
+                            <div style={{ height: 6 }} />
+                            <Skeleton w="92%" h={10} />
+                            <div style={{ height: 6 }} />
+                            <Skeleton w="80%" h={10} />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      <div>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                          What the company is
+                        </div>
+                        <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.6 }}>
+                          {companyWhatItIs || companySummary}
+                        </p>
+                        <p style={{ margin: '8px 0 0', color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.6 }}>
+                          {companyDescription || companySummary}
+                        </p>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                          Why it matters in a crisis
+                        </div>
+                        <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.6 }}>
+                          {companyCrisisRelevance}
+                        </p>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+                        {[
+                          {
+                            title: 'Key vulnerabilities',
+                            items: companyKeyVulnerabilities.length > 0 ? companyKeyVulnerabilities : [
+                              'Cyclical earnings pressure during demand and valuation contractions.',
+                              'Liquidity or refinancing pressure if capital markets tighten abruptly.',
+                              'Operational and regulatory shocks that can reduce earnings visibility.',
+                            ],
+                          },
+                          {
+                            title: 'Transmission channels',
+                            items: companyTransmissionChannels.length > 0 ? companyTransmissionChannels : [
+                              'Asset repricing can spread stress to credit, funding, and equity markets.',
+                              'Counterparty and customer behavior can accelerate liquidity strains.',
+                              'Capital allocation shifts can impact lending, investment, and confidence.',
+                            ],
+                          },
+                          {
+                            title: 'What to explore next',
+                            items: companyWhatToExploreNext.length > 0 ? companyWhatToExploreNext : [
+                              'Balance-sheet resilience: leverage, maturities, and liquidity buffers.',
+                              'Peer positioning across margins, valuation, and growth durability.',
+                              'Downside scenarios under recession, spread widening, and funding stress.',
+                            ],
+                          },
+                        ].map(section => (
+                          <div key={section.title} style={{ border: '1px solid var(--border)', background: 'var(--bg-elevated)', borderRadius: 10, padding: '12px 14px' }}>
+                            <div style={{ fontSize: 10.5, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>
+                              {section.title}
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                              {section.items.map((item, idx) => (
+                                <div key={`${section.title}-${idx}`} style={{ fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.55 }}>
+                                  {item}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <PriceChart symbol={symbol} />
 
               {/* Key metrics */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
@@ -604,6 +994,122 @@ export default function TickerPage() {
                   <FinRow label="Dividend Yield" value={data.dividendYield ? `${fmt(data.dividendYield, 2)}%` : '—'} />
                 </div>
               </div>
+
+              {heuristics && (
+                <div className="card" style={{ padding: '20px 22px' }}>
+                  <div style={{ fontSize: 10.5, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 12 }}>
+                    Crisis-relevance heuristics
+                  </div>
+                  {(() => {
+                    const riskItems = [
+                      { label: 'Funding risk', value: heuristics.fundingRisk },
+                      { label: 'Liquidity risk', value: heuristics.liquidityRisk },
+                      { label: 'Counterparty risk', value: heuristics.counterpartyRisk },
+                      { label: 'Sentiment sensitivity', value: heuristics.sentimentSensitivity },
+                      { label: 'Interconnectedness', value: heuristics.interconnectedness },
+                      { label: 'Confidence level', value: heuristics.confidenceLevel },
+                    ]
+
+                    return (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(150px, 1fr))', gap: 10 }}>
+                          {riskItems.slice(0, 4).map((item) => (
+                            <div
+                              key={item.label}
+                              style={{
+                                border: '1px solid var(--border)',
+                                borderRadius: 10,
+                                background: 'var(--bg-elevated)',
+                                padding: '11px 12px',
+                                minHeight: 76,
+                              }}
+                            >
+                              <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 10 }}>
+                                {item.label}
+                              </div>
+                              <span
+                                style={{
+                                  ...riskBadgeStyle(item.value),
+                                  display: 'inline-block',
+                                  borderRadius: 999,
+                                  padding: '4px 11px',
+                                  fontSize: 12,
+                                  fontWeight: 600,
+                                }}
+                              >
+                                {item.value}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(150px, 1fr))', gap: 10 }}>
+                          {riskItems.slice(4, 6).map((item) => (
+                            <div
+                              key={item.label}
+                              style={{
+                                border: '1px solid var(--border)',
+                                borderRadius: 10,
+                                background: 'var(--bg-elevated)',
+                                padding: '11px 12px',
+                                minHeight: 76,
+                              }}
+                            >
+                              <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 10 }}>
+                                {item.label}
+                              </div>
+                              <span
+                                style={{
+                                  ...riskBadgeStyle(item.value),
+                                  display: 'inline-block',
+                                  borderRadius: 999,
+                                  padding: '4px 11px',
+                                  fontSize: 12,
+                                  fontWeight: 600,
+                                }}
+                              >
+                                {item.value}
+                              </span>
+                            </div>
+                          ))}
+
+                          <div
+                            style={{
+                              border: '1px solid var(--border)',
+                              borderRadius: 10,
+                              background: 'var(--bg-elevated)',
+                              padding: '11px 12px',
+                              minHeight: 76,
+                              gridColumn: '3 / 5',
+                            }}
+                          >
+                            <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 10 }}>
+                              Major exposure categories
+                            </div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                              {heuristics.exposureCategories.map((item) => (
+                                <span
+                                  key={item}
+                                  style={{
+                                    fontSize: 12,
+                                    color: '#9fb6e9',
+                                    background: 'rgba(95, 138, 219, 0.12)',
+                                    border: '1px solid rgba(95, 138, 219, 0.28)',
+                                    borderRadius: 6,
+                                    padding: '4px 9px',
+                                  }}
+                                >
+                                  {item}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })()}
+                </div>
+              )}
             </div>
           )}
 

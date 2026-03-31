@@ -266,7 +266,7 @@ function OverviewPanel() {
           }
           if (c.title === 'Qualitative Research') {
             return (
-              <Link key={i} href="/protected/qa" style={{ textDecoration: 'none', color: 'inherit' }}>
+              <Link key={i} href="/protected/research" style={{ textDecoration: 'none', color: 'inherit' }}>
                 {card}
               </Link>
             )

@@ -8,7 +8,7 @@ import { createClient } from '@/lib/supabase/client'
 type NavItem = { label: string; href?: string }
 
 const NAV: { section: string; items: NavItem[] }[] = [
-  { section: 'ANALYSIS',  items: [{ label: 'Overview', href: '/protected' }, { label: 'Research', href: '/protected/qa' }, { label: 'Technical' }] },
+  { section: 'ANALYSIS',  items: [{ label: 'Overview', href: '/protected' }, { label: 'Research', href: '/protected/research' }, { label: 'Technical' }] },
   { section: 'VALUATION', items: [{ label: 'Valuation', href: '/protected/valuation' }] },
   { section: 'PORTFOLIO', items: [{ label: 'Optimiser', href: '/protected/optimiser' }, { label: 'Tail Risk' }] },
 ]
@@ -96,6 +96,41 @@ type IndexItem = { label: string; val: string; chg: string; up: boolean }
 type SearchResult = { symbol: string; description: string }
 const TICKER_PATTERN = /^[A-Z][A-Z0-9.-]{0,9}$/
 
+async function tickerExists(symbol: string): Promise<boolean> {
+  try {
+    const response = await fetch(`/api/ticker/${encodeURIComponent(symbol)}`)
+    return response.ok
+  } catch {
+    return false
+  }
+}
+
+async function resolveBestSymbol(rawQuery: string, seededResults: SearchResult[] = []): Promise<string | null> {
+  const trimmed = rawQuery.trim()
+  if (!trimmed) return null
+
+  const uppercase = trimmed.toUpperCase()
+  const ranked = seededResults.length > 0
+    ? seededResults
+    : await fetch(`/api/ticker/search?q=${encodeURIComponent(trimmed)}`)
+        .then((response) => response.ok ? response.json() : [])
+        .then((data) => Array.isArray(data) ? data : [])
+        .catch(() => [])
+
+  const normalized = ranked.filter((item): item is SearchResult => {
+    return typeof item?.symbol === 'string' && typeof item?.description === 'string'
+  })
+
+  const exact = normalized.find((item) => item.symbol.toUpperCase() === uppercase)
+  if (exact) return exact.symbol.toUpperCase()
+
+  if (TICKER_PATTERN.test(uppercase) && await tickerExists(uppercase)) {
+    return uppercase
+  }
+
+  return normalized[0]?.symbol?.toUpperCase() ?? (TICKER_PATTERN.test(uppercase) ? uppercase : null)
+}
+
 function TopBar() {
   const router = useRouter()
   const [displayName, setDisplayName] = useState('')
@@ -171,29 +206,15 @@ function TopBar() {
     setQuery('')
     setResults([])
     setOpen(false)
-    router.push(`/protected/ticker/${symbol}`)
+    router.push(`/protected/qa?ticker=${encodeURIComponent(symbol)}`)
   }
 
   async function handleSubmitSearch(rawQuery: string) {
     const trimmed = rawQuery.trim()
     if (!trimmed) return
 
-    const uppercase = trimmed.toUpperCase()
-    if (TICKER_PATTERN.test(uppercase)) {
-      handleSelect(uppercase)
-      return
-    }
-
-    const ranked = results.length > 0
-      ? results
-      : await fetch(`/api/ticker/search?q=${encodeURIComponent(trimmed)}`)
-          .then((response) => response.ok ? response.json() : [])
-          .catch(() => [])
-
-    const best = Array.isArray(ranked) ? ranked.find((item): item is SearchResult => typeof item?.symbol === 'string') : null
-    if (best) {
-      handleSelect(best.symbol)
-    }
+    const resolved = await resolveBestSymbol(trimmed, results)
+    if (resolved) handleSelect(resolved)
   }
 
   async function handleSignOut() {
