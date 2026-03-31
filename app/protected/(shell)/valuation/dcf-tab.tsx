@@ -40,6 +40,10 @@ function fmtPrice(n: number): string {
   return `$${n.toFixed(2)}`
 }
 
+function fmtNumberWithCommas(n: number): string {
+  return n.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+}
+
 function pctDiff(intrinsic: number, market: number): number {
   return ((intrinsic - market) / Math.abs(market)) * 100
 }
@@ -258,6 +262,7 @@ export function DCFTab({ symbol, currentPrice: priceFromParent }: { symbol: stri
   const [terminalGrowthRate, setTerminalGrowthRate] = useState<number>(2.5)
   const [scenario, setScenario] = useState<Scenario>('neutral')
   const [growthRates, setGrowthRates] = useState<GrowthRates>({ conservative: 5, neutral: 10, bullish: 15 })
+  const [baseFcfInput, setBaseFcfInput] = useState('')
 
   // Fetch API data when symbol changes
   useEffect(() => {
@@ -271,7 +276,12 @@ export function DCFTab({ symbol, currentPrice: priceFromParent }: { symbol: stri
       .then((data: DCFApiResponse) => {
         setApiData(data)
         // Pre-fill from API
-        if (data.baseFCF != null) setBaseFCF(data.baseFCF)
+        if (data.baseFCF != null) {
+          setBaseFCF(data.baseFCF)
+          setBaseFcfInput(fmtNumberWithCommas(data.baseFCF))
+        } else {
+          setBaseFcfInput('')
+        }
         setGrowthRates({
           conservative: Math.round(data.suggestions.conservative * 1000) / 10,
           neutral:      Math.round(data.suggestions.neutral * 1000) / 10,
@@ -346,9 +356,48 @@ export function DCFTab({ symbol, currentPrice: priceFromParent }: { symbol: stri
         <div className="card" style={{ padding: '20px 20px', display: 'flex', flexDirection: 'column', gap: 18 }}>
           <div style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Assumptions</div>
 
-          <NumInput label="Base FCF ($M)" value={baseFCF} onChange={setBaseFCF} suffix="M" step={1} placeholder="Enter or auto-fetched" />
+          <div>
+            <div style={{ fontSize: 10.5, color: 'var(--text-muted)', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 5 }}>
+              Base FCF ($M)
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input
+                type="text"
+                className="input-dark"
+                style={{ width: '100%' }}
+                value={baseFcfInput}
+                placeholder="Enter or auto-fetched"
+                inputMode="decimal"
+                onChange={e => {
+                  const raw = e.target.value
+                  const cleaned = raw.replace(/[^\d,.\-]/g, '')
+                  setBaseFcfInput(cleaned)
+                  const parsed = Number(cleaned.replace(/,/g, ''))
+                  setBaseFCF(Number.isFinite(parsed) ? parsed : null)
+                }}
+                onBlur={() => {
+                  if (baseFCF == null || !Number.isFinite(baseFCF)) {
+                    setBaseFcfInput('')
+                    return
+                  }
+                  setBaseFcfInput(fmtNumberWithCommas(baseFCF))
+                }}
+              />
+              <span style={{ fontSize: 12, color: 'var(--text-muted)', flexShrink: 0 }}>M</span>
+            </div>
+          </div>
 
-          <NumInput label="WACC" value={wacc} onChange={v => setWacc(v ?? 10)} suffix="%" min={0.1} max={50} step={0.1} />
+          <NumInput
+            label="WACC"
+            value={wacc}
+            onChange={v => {
+              if (v != null) setWacc(v)
+            }}
+            suffix="%"
+            min={0.1}
+            max={50}
+            step={0.1}
+          />
 
           {/* Projection Years slider */}
           <div>
@@ -373,7 +422,9 @@ export function DCFTab({ symbol, currentPrice: priceFromParent }: { symbol: stri
           <NumInput
             label="Terminal Growth Rate"
             value={terminalGrowthRate}
-            onChange={v => setTerminalGrowthRate(v ?? 2.5)}
+            onChange={v => {
+              if (v != null) setTerminalGrowthRate(v)
+            }}
             suffix="%"
             min={0}
             max={10}
@@ -409,7 +460,9 @@ export function DCFTab({ symbol, currentPrice: priceFromParent }: { symbol: stri
           <NumInput
             label={`${scenario.charAt(0).toUpperCase() + scenario.slice(1)} Annual Growth`}
             value={growthRates[scenario]}
-            onChange={v => setGrowthRates(r => ({ ...r, [scenario]: v ?? 0 }))}
+            onChange={v => {
+              if (v != null) setGrowthRates(r => ({ ...r, [scenario]: v }))
+            }}
             suffix="%"
             min={-50}
             max={100}
