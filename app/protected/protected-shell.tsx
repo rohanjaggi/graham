@@ -9,7 +9,7 @@ type NavItem = { label: string; href?: string }
 
 const NAV: { section: string; items: NavItem[] }[] = [
   { section: 'ANALYSIS',  items: [{ label: 'Overview', href: '/protected' }, { label: 'Research' }, { label: 'Technical' }] },
-  { section: 'VALUATION', items: [{ label: 'DCF Model' }, { label: 'Comparables' }] },
+  { section: 'VALUATION', items: [{ label: 'Valuation', href: '/protected/valuation' }] },
   { section: 'PORTFOLIO', items: [{ label: 'Optimiser', href: '/protected/optimiser' }, { label: 'Tail Risk' }] },
 ]
 
@@ -51,7 +51,7 @@ function Sidebar() {
             {items.map(({ label, href }) => {
               const icon =
                 label === 'Overview' ? '⬡' : label === 'Research' ? '⊕' : label === 'Technical' ? '△' :
-                label === 'DCF Model' ? '⊞' : label === 'Comparables' ? '≋' :
+                label === 'Valuation' ? '⊞' :
                 label === 'Optimiser' ? '◎' : '◐'
               const active = href ? isActive(href) : false
               const inner = (
@@ -89,7 +89,7 @@ function Sidebar() {
 const FALLBACK_INDICES = [
   { label: 'S&P 500', val: '—', chg: '—', up: true },
   { label: 'NASDAQ',  val: '—', chg: '—', up: true },
-  { label: '10Y UST', val: '—', chg: '—', up: true },
+  { label: '20+Y UST', val: '—', chg: '—', up: true },
 ]
 
 type IndexItem = { label: string; val: string; chg: string; up: boolean }
