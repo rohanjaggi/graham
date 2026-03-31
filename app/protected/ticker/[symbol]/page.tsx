@@ -55,9 +55,9 @@ function fmtDate(unix: number): string {
 /* ─── SIDEBAR ─────────────────────────────────────────────────────────────── */
 
 const NAV = [
-  { section: 'ANALYSIS',  items: [{ label: 'Overview' }, { label: 'Research' }, { label: 'Technical' }] },
-  { section: 'VALUATION', items: [{ label: 'DCF Model' }, { label: 'Comparables' }] },
-  { section: 'PORTFOLIO', items: [{ label: 'Optimiser' }, { label: 'Tail Risk' }] },
+  { section: 'ANALYSIS',  items: [{ label: 'Overview', href: '/protected' }, { label: 'Research' }, { label: 'Technical' }] },
+  { section: 'VALUATION', items: [{ label: 'Valuation', href: '/protected/valuation' }] },
+  { section: 'PORTFOLIO', items: [{ label: 'Optimiser', href: '/protected/optimiser' }, { label: 'Tail Risk' }] },
 ]
 
 function Sidebar() {
@@ -88,16 +88,23 @@ function Sidebar() {
             <div style={{ fontSize: 9.5, fontWeight: 600, letterSpacing: '0.13em', color: 'var(--text-muted)', padding: '0 14px 8px', textTransform: 'uppercase' }}>
               {section}
             </div>
-            {items.map(({ label }) => (
-              <div key={label} className="nav-item">
-                <span style={{ fontSize: 13, opacity: 0.75 }}>
-                  {label === 'Overview' ? '⬡' : label === 'Research' ? '⊕' : label === 'Technical' ? '△' :
-                   label === 'DCF Model' ? '⊞' : label === 'Comparables' ? '≋' :
-                   label === 'Optimiser' ? '◎' : '◐'}
-                </span>
-                {label}
-              </div>
-            ))}
+            {items.map(({ label, href }) => {
+              const icon =
+                label === 'Overview' ? '⬡' : label === 'Research' ? '⊕' : label === 'Technical' ? '△' :
+                label === 'Valuation' ? '⊞' :
+                label === 'Optimiser' ? '◎' : '◐'
+              return (
+                <div
+                  key={label}
+                  className="nav-item"
+                  style={href ? { cursor: 'pointer' } : undefined}
+                  onClick={href ? () => router.push(href) : undefined}
+                >
+                  <span style={{ fontSize: 13, opacity: 0.75 }}>{icon}</span>
+                  {label}
+                </div>
+              )
+            })}
           </div>
         ))}
       </nav>
