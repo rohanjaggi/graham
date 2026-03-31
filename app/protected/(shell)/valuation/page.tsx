@@ -2,6 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { DCFTab } from './dcf-tab'
 
 /* ─── TYPES ──────────────────────────────────────────────────────────────── */
 
@@ -879,13 +880,7 @@ function ValuationContent() {
       {/* Tab content */}
       {activeTab === 'dcf' && (
         symbol ? (
-          <div className="card" style={{ padding: '32px 36px', textAlign: 'center' }}>
-            <div style={{ fontSize: 28, marginBottom: 16, opacity: 0.35 }}>⊞</div>
-            <div style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 6 }}>DCF Model — Coming Soon</div>
-            <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
-              Adjustable WACC, growth rates, terminal value assumptions, and intrinsic value output.
-            </div>
-          </div>
+          <DCFTab symbol={symbol} currentPrice={profile?.price ?? null} />
         ) : <EmptyState />
       )}
 
