@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
 import { createClient } from '@/lib/supabase/server'
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+function getOpenAIClient() {
+  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+}
 
 /* ─── SEC EDGAR: map ticker → CIK, then fetch 10-K excerpt ─────────────── */
 
@@ -115,7 +117,7 @@ ${secText ? `10-K EXCERPT (most recent annual report):\n${secText}` : '10-K: Not
 
   let completion
   try {
-    completion = await openai.chat.completions.create({
+    completion = await getOpenAIClient().chat.completions.create({
       model: 'gpt-5.4-mini',
       response_format: { type: 'json_object' },
       temperature: 0.3,

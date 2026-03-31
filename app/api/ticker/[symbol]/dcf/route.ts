@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
 import { createClient } from '@/lib/supabase/server'
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+function getOpenAIClient() {
+  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+}
 
 /* ─── TYPES ──────────────────────────────────────────────────────────────── */
 
@@ -196,8 +198,8 @@ export async function GET(
   const reportedRows = Array.isArray(financials?.data) ? financials.data : []
   const latestReportedFcf = reportedRows
     .map((x: unknown) => x as Record<string, unknown>)
-    .sort((a, b) => (yearFromEndDate(b.endDate) ?? 0) - (yearFromEndDate(a.endDate) ?? 0))
-    .map(row => extractReportedFcfRaw(row?.report))
+    .sort((a: Record<string, unknown>, b: Record<string, unknown>) => (yearFromEndDate(b.endDate) ?? 0) - (yearFromEndDate(a.endDate) ?? 0))
+    .map((row: Record<string, unknown>) => extractReportedFcfRaw(row.report))
     .find((x: number | null): x is number => x != null)
 
   const fcfPerShare: number | null = metrics['cashFlowPerShareTTM'] ?? null
@@ -231,7 +233,7 @@ DEBT/EQUITY: ${metrics['totalDebt/totalEquityAnnual'] ?? '—'}
   let suggestions: DCFSuggestions = { conservative: 0.05, neutral: 0.10, bullish: 0.15, terminalGrowthRate: 0.025 }
 
   try {
-    const completion = await openai.chat.completions.create({
+    const completion = await getOpenAIClient().chat.completions.create({
       model: 'gpt-5.4-mini',
       response_format: { type: 'json_object' },
       temperature: 0.2,
