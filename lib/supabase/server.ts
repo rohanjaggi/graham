@@ -14,9 +14,10 @@ function createMissingServerClient() {
   }
 }
 
+//finnhub api: d76cfo1r01qm4b7tou6gd76cfo1r01qm4b7tou70
 export async function createClient() {
   const cookieStore = await cookies()
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL //
   const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
 
   if (!url || !key) {

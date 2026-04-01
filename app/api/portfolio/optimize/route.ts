@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { BENCHMARK_ETFS } from '@/lib/portfolio/benchmarks'
+import { z } from 'zod'
 import {
   buildReturnMatrix,
   clampLookbackYears,
@@ -7,7 +8,8 @@ import {
   minObservationsForLookback,
   toYahooSymbol,
 } from '@/lib/portfolio/yahoo'
-import { type Objective, metricsForDailyReturns, runOptimize } from '@/lib/portfolio/optimizer'
+import { type Objective, metricsForDailyReturns, runOptimize, runProfileOptimize } from '@/lib/portfolio/optimizer'
+import { PortfolioProfileOptimizeResponse } from '@/lib/portfolio/contracts'
 
 const OBJECTIVES: Objective[] = [
   'max_sharpe',
@@ -16,6 +18,35 @@ const OBJECTIVES: Objective[] = [
   'min_volatility',
   'min_max_drawdown',
 ]
+
+const InvestmentHorizon = z.enum(['<3y', '3–7y', '>7y'])
+const RiskTolerance = z.enum(['CONSERVATIVE', 'MODERATE', 'AGGRESSIVE'])
+const UniverseFilter = z.enum(['US_LARGE_CAP', 'US_ALL_CAP'])
+
+const HardConstraintsSchema = z.object({
+  max_single_position: z
+    .number()
+    .min(0.0)
+    .max(0.3)
+    .optional(),
+  max_sector_weight: z
+    .number()
+    .min(0.0)
+    .max(1.0)
+    .optional()
+}).optional()
+
+const ProfileOptimizeBodySchema = z.object({
+  asset_tickers: z
+    .array(z.string().min(1))
+    .min(3)
+    .max(15),
+  lookback_period_years: z.number().int().min(1).max(10).default(5),
+  investment_horizon_bucket: InvestmentHorizon,
+  risk_tolerance: RiskTolerance,
+  universe_filter: UniverseFilter,
+  hard_constraints: HardConstraintsSchema
+})
 
 type AdjSeries = Awaited<ReturnType<typeof fetchAdjCloseSeries>>
 

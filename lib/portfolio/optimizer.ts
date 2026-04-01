@@ -375,6 +375,42 @@ function computeWeights(R: number[][], objective: Objective, rfAnnual: number, m
   }
 }
 
+// R: T x n matrix of daily returns
+function sampleCovariance(R: number[][]): number[][] { /* likely already present */ }
+
+function shrinkToIdentity(
+  Sigma: number[][]
+): { shrunk: number[][]; alpha: number } {
+  const n = Sigma.length
+  // 1) Target: scalar times identity
+  const avgVar = Sigma.reduce((sum, row, i) => sum + row[i], 0) / n
+  const F = avgVar
+
+  // 2) Compute squared Frobenius norm of (Sigma - F I)
+  let sqDiff = 0
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) {
+      const diff = Sigma[i][j] - (i === j ? F : 0)
+      sqDiff += diff * diff
+    }
+  }
+
+  // 3) Estimate alpha (shrinkage intensity) heuristically
+  // For PoC you can start with something simple and conservative:
+  const alpha = Math.min(0.5, Math.max(0.1, sqDiff / (sqDiff + 1e-4)))
+
+  // 4) Blend
+  const shrunk: number[][] = []
+  for (let i = 0; i < n; i++) {
+    shrunk[i] = []
+    for (let j = 0; j < n; j++) {
+      const target = i === j ? F : 0
+      shrunk[i][j] = alpha * target + (1 - alpha) * Sigma[i][j]
+    }
+  }
+
+  return { shrunk, alpha }
+}
 export function runOptimize(
   R: number[][],
   symbols: string[],
