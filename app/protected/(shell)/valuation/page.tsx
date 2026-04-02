@@ -775,7 +775,9 @@ function ValuationContent() {
   const searchParams = useSearchParams()
   const [symbol, setSymbol] = useState(searchParams.get('symbol')?.toUpperCase() ?? '')
   const [profile, setProfile] = useState<CompanyProfile | null>(null)
-  const [activeTab, setActiveTab] = useState<'dcf' | 'comparables'>('dcf')
+  const [activeTab, setActiveTab] = useState<'dcf' | 'comparables'>(
+    searchParams.get('tab') === 'comparables' ? 'comparables' : 'dcf'
+  )
   const [compsKey, setCompsKey] = useState(0) // increment to re-mount comps on symbol change
 
   useEffect(() => {
@@ -801,8 +803,16 @@ function ValuationContent() {
     const upper = sym.toUpperCase()
     setSymbol(upper)
     setCompsKey(k => k + 1)
-    router.push(`/protected/valuation?symbol=${upper}`, { scroll: false })
-  }, [router])
+    router.push(`/protected/valuation?symbol=${upper}&tab=${activeTab}`, { scroll: false })
+  }, [activeTab, router])
+
+  function switchTab(nextTab: 'dcf' | 'comparables') {
+    setActiveTab(nextTab)
+    const query = symbol
+      ? `/protected/valuation?symbol=${symbol}&tab=${nextTab}`
+      : `/protected/valuation?tab=${nextTab}`
+    router.push(query, { scroll: false })
+  }
 
   return (
     <div style={{ fontFamily: "'DM Sans', sans-serif" }}>
@@ -869,10 +879,10 @@ function ValuationContent() {
 
       {/* Tabs */}
       <div className="tab-bar" style={{ marginBottom: 28 }}>
-        <button className={`tab${activeTab === 'dcf' ? ' active' : ''}`} onClick={() => setActiveTab('dcf')}>
+        <button className={`tab${activeTab === 'dcf' ? ' active' : ''}`} onClick={() => switchTab('dcf')}>
           DCF Valuation
         </button>
-        <button className={`tab${activeTab === 'comparables' ? ' active' : ''}`} onClick={() => setActiveTab('comparables')}>
+        <button className={`tab${activeTab === 'comparables' ? ' active' : ''}`} onClick={() => switchTab('comparables')}>
           Comparables
         </button>
       </div>

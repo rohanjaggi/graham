@@ -23,6 +23,7 @@ const CURATED_TICKERS = [
 ]
 
 type SearchItem = { symbol: string; description: string }
+type SearchMode = 'autocomplete' | 'intent'
 
 function levenshtein(a: string, b: string): number {
   if (a === b) return 0
@@ -96,6 +97,16 @@ function extractJsonArray(raw: string): SearchItem[] {
   }
 }
 
+function normalizeSearchItems(items: SearchItem[]): SearchItem[] {
+  return items
+    .filter((item): item is SearchItem => typeof item?.symbol === 'string' && typeof item?.description === 'string')
+    .map((item) => ({
+      symbol: item.symbol.toUpperCase().trim(),
+      description: item.description.trim(),
+    }))
+    .filter((item) => item.symbol.length > 0)
+}
+
 async function fetchYahooMatches(query: string): Promise<SearchItem[]> {
   try {
     const response = await fetch(`https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=12&newsCount=0`, {
@@ -134,8 +145,44 @@ function rankAndDedup(query: string, ...groups: SearchItem[][]): SearchItem[] {
     .map((entry) => entry.item)
 }
 
+function mergeAndDedup(...groups: SearchItem[][]): SearchItem[] {
+  const seen = new Set<string>()
+  const merged: SearchItem[] = []
+
+  for (const group of groups) {
+    for (const item of group) {
+      if (!seen.has(item.symbol)) {
+        seen.add(item.symbol)
+        merged.push(item)
+      }
+    }
+  }
+
+  return merged
+}
+
+async function fetchAiMatches(query: string, mode: SearchMode, apiKey: string): Promise<SearchItem[]> {
+  const openai = new OpenAI({ apiKey })
+  const response = await openai.responses.create({
+    model: process.env.OPENAI_QA_MODEL ?? 'gpt-4.1-mini',
+    instructions: mode === 'intent'
+      ? 'Act like a finance research discovery engine. Return a JSON array only. Each item must have `symbol` and `description`, ranked best first for public stocks or ETFs relevant to the user intent.'
+      : 'Act like a Google-style finance autocomplete. Return a JSON array only. Each item must have `symbol` and `description`, ranked best match first for a listed stock or ETF relevant to the user query.',
+    input: mode === 'intent'
+      ? `User research prompt: "${query}". Return up to 10 public stocks or ETFs that are relevant to this idea or theme. Prefer liquid, recognizable securities. Keep descriptions short, concrete, and beginner-friendly.`
+      : `User search: "${query}". Find up to 8 likely public-market ticker matches. Support plain-English searches like "largest US bank", "JPMorgan", or "financial sector ETF". Keep descriptions short and beginner-friendly, and rank the most likely ticker first.`,
+    temperature: 0,
+    tools: [{ type: 'web_search_preview', search_context_size: 'low' }],
+  } as never)
+
+  return normalizeSearchItems(
+    extractJsonArray((response as unknown as { output_text?: string }).output_text ?? '[]')
+  )
+}
+
 export async function GET(request: NextRequest) {
   const q = request.nextUrl.searchParams.get('q')?.trim()
+  const mode = request.nextUrl.searchParams.get('mode') === 'intent' ? 'intent' : 'autocomplete'
   if (!q || q.length < 1) return NextResponse.json([])
 
   const localMatches = CURATED_TICKERS
@@ -148,28 +195,25 @@ export async function GET(request: NextRequest) {
   const rankedWithYahoo = rankAndDedup(q, localMatches, yahooMatches)
 
   const apiKey = process.env.OPENAI_API_KEY
-  if (!apiKey || rankedWithYahoo.length >= 5) {
-    return NextResponse.json(rankedWithYahoo.slice(0, 12))
+  if (!apiKey) {
+    return NextResponse.json(rankedWithYahoo.slice(0, mode === 'intent' ? 10 : 12))
   }
 
   try {
-    const openai = new OpenAI({ apiKey })
-    const response = await openai.responses.create({
-      model: process.env.OPENAI_QA_MODEL ?? 'gpt-4.1-mini',
-      instructions: 'Act like a Google-style finance autocomplete. Return a JSON array only. Each item must have `symbol` and `description`, ranked best match first for a listed stock or ETF relevant to the user query.',
-      input: `User search: "${q}". Find up to 8 likely public-market ticker matches. Support plain-English searches like "largest US bank", "JPMorgan", or "financial sector ETF". Keep descriptions short and beginner-friendly, and rank the most likely ticker first.`,
-      temperature: 0,
-      tools: [{ type: 'web_search_preview', search_context_size: 'low' }],
-    } as never)
+    if (mode === 'intent') {
+      const aiMatches = await fetchAiMatches(q, mode, apiKey)
+      const merged = mergeAndDedup(aiMatches, yahooMatches, localMatches)
+      return NextResponse.json(merged.slice(0, 10))
+    }
 
-    const aiMatches = extractJsonArray((response as unknown as { output_text?: string }).output_text ?? '{}')
-      .filter((item): item is SearchItem => typeof item?.symbol === 'string' && typeof item?.description === 'string')
-      .map((item) => ({ symbol: item.symbol.toUpperCase().trim(), description: item.description.trim() }))
-      .filter((item) => item.symbol.length > 0)
+    if (rankedWithYahoo.length >= 5) {
+      return NextResponse.json(rankedWithYahoo.slice(0, 12))
+    }
 
+    const aiMatches = await fetchAiMatches(q, mode, apiKey)
     const ranked = rankAndDedup(q, rankedWithYahoo, aiMatches)
     return NextResponse.json(ranked.slice(0, 12))
   } catch {
-    return NextResponse.json(rankedWithYahoo.slice(0, 12))
+    return NextResponse.json(rankedWithYahoo.slice(0, mode === 'intent' ? 10 : 12))
   }
 }

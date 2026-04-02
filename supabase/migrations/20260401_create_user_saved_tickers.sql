@@ -32,23 +32,27 @@ execute function public.set_user_saved_tickers_updated_at();
 
 alter table public.user_saved_tickers enable row level security;
 
-create policy if not exists "user_saved_tickers_select_own"
+drop policy if exists "user_saved_tickers_select_own" on public.user_saved_tickers;
+create policy "user_saved_tickers_select_own"
   on public.user_saved_tickers
   for select
   using (auth.uid() = user_id);
 
-create policy if not exists "user_saved_tickers_insert_own"
+drop policy if exists "user_saved_tickers_insert_own" on public.user_saved_tickers;
+create policy "user_saved_tickers_insert_own"
   on public.user_saved_tickers
   for insert
   with check (auth.uid() = user_id);
 
-create policy if not exists "user_saved_tickers_update_own"
+drop policy if exists "user_saved_tickers_update_own" on public.user_saved_tickers;
+create policy "user_saved_tickers_update_own"
   on public.user_saved_tickers
   for update
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
 
-create policy if not exists "user_saved_tickers_delete_own"
+drop policy if exists "user_saved_tickers_delete_own" on public.user_saved_tickers;
+create policy "user_saved_tickers_delete_own"
   on public.user_saved_tickers
   for delete
   using (auth.uid() = user_id);

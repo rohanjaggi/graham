@@ -69,7 +69,7 @@ export function minObservationsForLookback(years: number): { minPriceRows: numbe
 export function buildReturnMatrix(
   seriesBySymbol: Map<string, Point[]>,
   years = 5
-): { symbols: string[]; R: number[][]; tradingDays: number } | null {
+): { symbols: string[]; R: number[][]; timestamps: number[]; tradingDays: number } | null {
   const { minPriceRows, minReturnRows } = minObservationsForLookback(years)
   const symbols = [...seriesBySymbol.keys()]
   if (symbols.length < 2) return null
@@ -97,15 +97,17 @@ export function buildReturnMatrix(
   if (prices.length < minPriceRows) return null
 
   const R: number[][] = []
+  const timestamps: number[] = []
   for (let t = 1; t < prices.length; t++) {
     const prev = prices[t - 1]
     const cur = prices[t]
     const rets = symbols.map((_, i) => (cur[i] - prev[i]) / prev[i])
     if (rets.some(x => !Number.isFinite(x))) continue
     R.push(rets)
+    timestamps.push(days[t] * 86400)
   }
 
   if (R.length < minReturnRows) return null
 
-  return { symbols, R, tradingDays: R.length }
+  return { symbols, R, timestamps, tradingDays: R.length }
 }

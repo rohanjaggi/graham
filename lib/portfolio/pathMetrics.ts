@@ -8,6 +8,19 @@ export function computePathRiskMetrics(
   portfolioReturns: number[],   // daily simple returns
   timestamps: number[]          // unix seconds for each return
 ): PathRiskMetrics {
+  if (portfolioReturns.length === 0) {
+    return {
+      maxDrawdown: 0,
+      worstMonthReturn: 0,
+      worstQuarterReturn: 0,
+    }
+  }
+
+  const effectiveTimestamps =
+    timestamps.length === portfolioReturns.length
+      ? timestamps
+      : portfolioReturns.map((_, index) => index * 86400)
+
   // 1) Max drawdown (you already have one in optimizer.ts; consider reusing that logic)
   let peak = 0
   let maxDd = 0
@@ -22,7 +35,7 @@ export function computePathRiskMetrics(
   // 2) Group by calendar month YYYY-MM
   const byMonth = new Map<string, number>()
   for (let i = 0; i < portfolioReturns.length; i++) {
-    const d = new Date(timestamps[i] * 1000)
+    const d = new Date(effectiveTimestamps[i] * 1000)
     const key = `${d.getUTCFullYear()}-${d.getUTCMonth() + 1}`
     const r = portfolioReturns[i]
     const prev = byMonth.get(key) ?? 0
