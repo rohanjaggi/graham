@@ -10,7 +10,7 @@ type NavItem = { label: string; href?: string }
 const NAV: { section: string; items: NavItem[] }[] = [
   { section: 'ANALYSIS',  items: [{ label: 'Overview', href: '/protected' }, { label: 'Research', href: '/protected/research' }, { label: 'Technical' }] },
   { section: 'VALUATION', items: [{ label: 'Valuation', href: '/protected/valuation' }] },
-  { section: 'PORTFOLIO', items: [{ label: 'Optimiser', href: '/protected/optimiser' }, { label: 'Tail Risk' }] },
+  { section: 'PORTFOLIO', items: [{ label: 'Optimiser', href: '/protected/optimiser' }, { label: 'Portfolios', href: '/protected/portfolios' }, { label: 'Tail Risk', href: '/protected/tail-risk' }] },
 ]
 
 function Sidebar() {
@@ -52,6 +52,7 @@ function Sidebar() {
               const icon =
                 label === 'Overview' ? '⬡' : label === 'Research' ? '⊕' : label === 'Technical' ? '△' :
                 label === 'Valuation' ? '⊞' :
+                label === 'Portfolios' ? '●' :
                 label === 'Optimiser' ? '◎' : '◐'
               const active = href ? isActive(href) : false
               const inner = (
@@ -234,7 +235,7 @@ function TopBar() {
         <input
           className="input-dark"
           style={{ paddingLeft: 36 }}
-          placeholder="Search ticker, company, or plain-English phrase…"
+          placeholder="Search ticker or company..."
           value={query}
           onChange={handleQueryChange}
           onKeyDown={e => {
@@ -378,3 +379,4 @@ export function ProtectedShell({ children }: { children: React.ReactNode }) {
     </div>
   )
 }
+

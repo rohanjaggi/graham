@@ -376,7 +376,9 @@ function computeWeights(R: number[][], objective: Objective, rfAnnual: number, m
 }
 
 // R: T x n matrix of daily returns
-function sampleCovariance(R: number[][]): number[][] { /* likely already present */ }
+function sampleCovariance(R: number[][]): number[][] {
+  return covariance(R)
+}
 
 function shrinkToIdentity(
   Sigma: number[][]

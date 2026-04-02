@@ -1,5 +1,5 @@
-export type InvestmentHorizonBucket = '<3y' | '3–7y' | '>7y'
-export type RiskTolerance = 'CONSERVATIVE' | 'MODERATE' | 'AGGRESSIVE'
+export type InvestmentHorizonBucket = '<3y' | '3-7y' | '>7y'
+export type RiskTolerance = 'DEFENSIVE' | 'CONSERVATIVE' | 'MODERATE' | 'AGGRESSIVE'
 export type UniverseFilter = 'US_LARGE_CAP' | 'US_ALL_CAP'
 
 export interface HardConstraints {
@@ -44,3 +44,32 @@ export interface PortfolioProfileOptimizeResponse {
   risk_free_rate_used: number
   data_warnings?: string[]
 }
+export interface PortfolioSummary {
+  id: string
+  name: string
+  objective: string
+  investmentHorizon: string
+  riskTolerance: string
+  universeFilter: string
+  expectedAnnualReturn: number
+  expectedAnnualVolatility: number
+  sharpeRatio: number
+  maxDrawdown: number
+  worstMonthReturn: number
+  worstQuarterReturn: number
+  riskFreeRateUsed: number
+  createdAt: string
+  updatedAt: string
+}
+export interface PortfolioPosition {
+  symbol: string
+  weight: number
+  sector: string | null
+}         
+export interface CreatePortfolioBody {
+  name: string
+  notes?: string
+  optimizeRequest?: unknown
+  optimizeResult?: PortfolioProfileOptimizeResponse
+}
+
