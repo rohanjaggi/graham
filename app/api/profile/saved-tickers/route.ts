@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
 
 const TICKER_PATTERN = /^[A-Z][A-Z0-9.-]{0,9}$/

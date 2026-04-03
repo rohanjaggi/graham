@@ -22,7 +22,9 @@ async function tickerExists(symbol: string): Promise<boolean> {
 export default function ResearchSearchPage() {
   const router = useRouter()
   const [query, setQuery] = useState('')
+  const [intentQuery, setIntentQuery] = useState('')
   const [loading, setLoading] = useState(false)
+  const [intentLoading, setIntentLoading] = useState(false)
   const [error, setError] = useState('')
   const [results, setResults] = useState<SearchResult[]>([])
   const [searching, setSearching] = useState(false)
@@ -32,6 +34,7 @@ export default function ResearchSearchPage() {
   const wrapRef = useRef<HTMLDivElement>(null)
 
   const canSearch = useMemo(() => query.trim().length > 0 && !loading, [query, loading])
+  const canIntentSearch = useMemo(() => intentQuery.trim().length > 0 && !intentLoading, [intentQuery, intentLoading])
 
   useEffect(() => {
     function onOutsideClick(e: MouseEvent) {
@@ -194,6 +197,14 @@ export default function ResearchSearchPage() {
     }
   }
 
+  async function handleIntentSearch(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    if (!canIntentSearch) return
+    setError('')
+    setIntentLoading(true)
+    router.push(`/protected/research/results?q=${encodeURIComponent(intentQuery.trim())}`)
+  }
+
   return (
     <div className="animate-fade-up d1" style={{ maxWidth: 1120, margin: '4.5vh auto 0', padding: '0 16px 28px' }}>
       <section className="card" style={{ padding: '22px 0 0', overflow: 'hidden' }}>
@@ -205,9 +216,45 @@ export default function ResearchSearchPage() {
             Qualitative Analysis
           </h1>
           <p style={{ margin: '12px 0 0', color: 'var(--text-secondary)', fontSize: 14.5, lineHeight: 1.65, maxWidth: 980 }}>
-            Generate a concise crisis-focused brief by searching the way you would on Google. Type a ticker, company name, or plain-English phrase,
-            and we will resolve the best match before sending you to QA.
+            Describe what you want in plain English, and we will resolve the best stock or ETF match before sending you to QA.
+            Use the prompt bar below for idea-driven searches, or the direct search box for ticker and company lookups.
           </p>
+        </div>
+
+        <div style={{ padding: '0 22px 18px' }}>
+          <div
+            className="card-elevated"
+            style={{
+              padding: '18px 18px 16px',
+              border: '1px solid var(--border-bright)',
+              background: 'linear-gradient(180deg, rgba(200,169,110,0.08), rgba(14,17,28,0.92))',
+            }}
+          >
+            <div style={{ fontSize: 11, letterSpacing: '0.14em', color: 'var(--gold-dim)', textTransform: 'uppercase', fontWeight: 600 }}>
+              Describe What You Want
+            </div>
+            <div style={{ marginTop: 8, color: 'var(--text-secondary)', fontSize: 13.5, lineHeight: 1.6 }}>
+              Examples: medtech innovators, ageing-population healthcare beneficiaries, AI infrastructure leaders, or defensive income compounders.
+            </div>
+            <form onSubmit={handleIntentSearch} style={{ display: 'flex', gap: 10, alignItems: 'stretch', marginTop: 14 }}>
+              <input
+                className="input-dark"
+                value={intentQuery}
+                onChange={(e) => setIntentQuery(e.target.value)}
+                placeholder="Describe what you want..."
+                autoComplete="off"
+                aria-label="Describe what you want"
+              />
+              <button
+                type="submit"
+                disabled={!canIntentSearch}
+                className="btn-gold"
+                style={{ minWidth: 132, opacity: canIntentSearch ? 1 : 0.6, cursor: canIntentSearch ? 'pointer' : 'not-allowed' }}
+              >
+                {intentLoading ? 'Loading...' : 'Find matches'}
+              </button>
+            </form>
+          </div>
         </div>
 
         <div style={{ borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)', padding: '18px 22px' }}>
@@ -239,7 +286,7 @@ export default function ResearchSearchPage() {
                     setQuery('')
                   }
                 }}
-                placeholder="Search like Google: ticker, company, or plain-English phrase..."
+                placeholder="Search ticker or company directly..."
                 autoComplete="off"
                 aria-label="Search ticker or company"
               />
@@ -329,7 +376,7 @@ export default function ResearchSearchPage() {
           )}
 
           <p style={{ marginTop: 10, color: 'var(--text-muted)', fontSize: 12.5 }}>
-            Search like Google: try JPMorgan, largest US bank, or financial sector ETF. Press Enter to use the best match.
+            Try prompts like JPMorgan, largest US bank, or financial sector ETF. Press Enter to use the best match.
           </p>
 
           {error && (
