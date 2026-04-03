@@ -1,14 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { NextRequest } from 'next/server'
 
-const createClientMock = vi.fn()
+vi.mock('@/lib/supabase/server')
 
-vi.mock('@/lib/supabase/server', () => ({
-  createClient: createClientMock,
-}))
-
-import { GET as getPortfolios, POST as createPortfolio } from './route'
-import { GET as getPortfolioById } from './[id]/route'
+const { createClient } = await import('@/lib/supabase/server')
+const createClientMock = createClient as ReturnType<typeof vi.fn>
+const { GET: getPortfolios, POST: createPortfolio } = await import('./route')
+const { GET: getPortfolioById } = await import('./[id]/route')
 
 function buildJsonRequest(body: unknown) {
   return new Request('http://localhost/api/test', {

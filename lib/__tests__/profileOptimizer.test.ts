@@ -112,7 +112,7 @@ describe('runProfileOptimize', () => {
         hardConstraints: { max_single_position: 0.25, max_sector_weight: 0.4 },
         sectorBySymbol: { AAA: 'Tech', BBB: 'Tech', CCC: 'Tech' },
       })
-    )).rejects.toThrow('Could not find a feasible portfolio')
+    )).rejects.toThrow('Infeasible max_single_position constraint')
   })
 
   it('adds risk warnings when drawdowns are harsh for conservative short-horizon users', async () => {
