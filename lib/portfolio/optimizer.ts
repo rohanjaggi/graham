@@ -122,33 +122,54 @@ function randomWeights(n: number): number[] {
   return g.map(x => x / s)
 }
 
-function minVolatility(Sigma: number[][]): number[] {
-  const n = Sigma.length
-  let w = new Array(n).fill(1 / n)
-  const lr = 0.5
-  for (let iter = 0; iter < 8000; iter++) {
-    const grad = matVec(Sigma, w).map(x => 2 * x)
-    w = projectOntoSimplex(w.map((wi, i) => wi - lr * grad[i]))
-  }
-  return w
+/** z on unit simplex → weights with w_i ≥ minW and Σw = 1 (if minW ≤ 0, returns z). */
+function wFromZ(z: number[], minW: number): number[] {
+  if (minW <= 0 || !Number.isFinite(minW)) return z.slice()
+  const n = z.length
+  const cap = 1 - n * minW
+  if (cap <= 1e-14) throw new Error('MIN_WEIGHT_INFEASIBLE')
+  return z.map(zi => minW + cap * zi)
 }
 
-function maxSharpeGradient(mu: number[], Sigma: number[][], rfAnnual: number): number[] {
+function capFromMinW(n: number, minW: number): number {
+  return minW > 0 ? 1 - n * minW : 1
+}
+
+function minVolatility(Sigma: number[][], minW: number): number[] {
+  const n = Sigma.length
+  const cap = capFromMinW(n, minW)
+  let z = new Array(n).fill(1 / n)
+  const lr = 0.5
+  for (let iter = 0; iter < 8000; iter++) {
+    const w = wFromZ(z, minW)
+    const gradW = matVec(Sigma, w).map(x => 2 * x)
+    const gradZ = minW > 0 ? gradW.map(g => g * cap) : gradW
+    z = projectOntoSimplex(z.map((zi, i) => zi - lr * gradZ[i]))
+  }
+  return wFromZ(z, minW)
+}
+
+function maxSharpeGradient(mu: number[], Sigma: number[][], rfAnnual: number, minW: number): number[] {
   const rfDaily = Math.pow(1 + rfAnnual, 1 / TRADING_DAYS) - 1
   const muEx = mu.map(m => m - rfDaily)
   const n = mu.length
+  const cap = capFromMinW(n, minW)
   let best = randomWeights(n)
   let bestS = -Infinity
+  const toW = (zz: number[]) => wFromZ(zz, minW)
   for (let r = 0; r < 12; r++) {
-    let w = randomWeights(n)
+    let z = randomWeights(n)
     for (let iter = 0; iter < 6000; iter++) {
+      const w = toW(z)
       const Sw = matVec(Sigma, w)
       const sig2 = Math.max(dot(w, Sw), 1e-12)
       const sig = Math.sqrt(sig2)
       const f = dot(muEx, w)
-      const grad = muEx.map((m, i) => (m * sig2 - f * Sw[i]) / (sig2 * sig + 1e-15))
-      w = projectOntoSimplex(w.map((wi, i) => wi + 0.25 * grad[i]))
+      const gradW = muEx.map((m, i) => (m * sig2 - f * Sw[i]) / (sig2 * sig + 1e-15))
+      const gradZ = minW > 0 ? gradW.map(g => g * cap) : gradW
+      z = projectOntoSimplex(z.map((zi, i) => zi + 0.25 * gradZ[i]))
     }
+    const w = toW(z)
     const s = (() => {
       const muP = dot(muEx, w)
       const varP = Math.max(dot(w, matVec(Sigma, w)), 1e-12)
@@ -156,24 +177,26 @@ function maxSharpeGradient(mu: number[], Sigma: number[][], rfAnnual: number): n
     })()
     if (s > bestS) {
       bestS = s
-      best = [...w]
+      best = z.slice()
     }
   }
-  let wRef = best
+  let zRef = best
   for (let iter = 0; iter < 8000; iter++) {
-    const Sw = matVec(Sigma, wRef)
-    const sig2 = Math.max(dot(wRef, Sw), 1e-12)
+    const w = toW(zRef)
+    const Sw = matVec(Sigma, w)
+    const sig2 = Math.max(dot(w, Sw), 1e-12)
     const sig = Math.sqrt(sig2)
-    const f = dot(muEx, wRef)
-    const grad = muEx.map((m, i) => (m * sig2 - f * Sw[i]) / (sig2 * sig + 1e-15))
-    wRef = projectOntoSimplex(wRef.map((wi, i) => wi + 0.3 * grad[i]))
+    const f = dot(muEx, w)
+    const gradW = muEx.map((m, i) => (m * sig2 - f * Sw[i]) / (sig2 * sig + 1e-15))
+    const gradZ = minW > 0 ? gradW.map(g => g * cap) : gradW
+    zRef = projectOntoSimplex(zRef.map((zi, i) => zi + 0.3 * gradZ[i]))
   }
-  return wRef
+  return toW(zRef)
 }
 
 function monteCarloBest(
   n: number,
-  score: (w: number[]) => number,
+  score: (z: number[]) => number,
   samples: number,
   maximize: boolean
 ): number[] {
@@ -205,6 +228,42 @@ function monteCarloBest(
   return w
 }
 
+/** After rounding, enforce each weight ≥ floor and renormalise (proportional take from above-floor names). */
+function applyMinWeightAfterRound(w: number[], floor: number): number[] {
+  if (floor <= 0) return normalizeTo100(w)
+  const n = w.length
+  let x = normalizeTo100(w)
+  for (let t = 0; t < 80; t++) {
+    const i = x.findIndex(v => v < floor - 1e-9)
+    if (i < 0) break
+    const need = floor - x[i]
+    x[i] = floor
+    let surplus = 0
+    const weights: number[] = []
+    for (let j = 0; j < n; j++) {
+      if (j === i) {
+        weights.push(0)
+        continue
+      }
+      const ex = Math.max(0, x[j] - floor)
+      weights.push(ex)
+      surplus += ex
+    }
+    if (surplus < need - 1e-10) {
+      return normalizeTo100(w)
+    }
+    for (let j = 0; j < n; j++) {
+      if (j !== i) x[j] -= need * (weights[j] / surplus)
+    }
+  }
+  let s = x.reduce((a, b) => a + b, 0)
+  if (Math.abs(s - 1) > 1e-6 && n > 0) {
+    const k = x.indexOf(Math.max(...x))
+    x[k] += 1 - s
+  }
+  return x.map(v => Math.round(v * 10000) / 10000)
+}
+
 export function normalizeTo100(w: number[]): number[] {
   const s = w.reduce((a, b) => a + b, 0)
   const raw = w.map(x => (s > 0 ? x / s : 0))
@@ -231,6 +290,7 @@ export interface OptimizeResult {
   objective: Objective
   metrics: MetricBlock
   sample: { tradingDays: number; rfAnnualPct: number }
+  minWeightPct?: number
 }
 
 /** Implied sample metrics for a single daily return series (same definitions as optimised portfolio). */
@@ -272,7 +332,7 @@ export function metricsForDailyReturns(rp: number[], rfAnnual = 0.04): MetricBlo
   }
 }
 
-function computeWeights(R: number[][], objective: Objective, rfAnnual: number): number[] {
+function computeWeights(R: number[][], objective: Objective, rfAnnual: number, minW: number): number[] {
   const mu = columnMeans(R)
   const Sigma = covariance(R)
   const n = mu.length
@@ -282,54 +342,104 @@ function computeWeights(R: number[][], objective: Objective, rfAnnual: number): 
     case 'max_return': {
       let k = 0
       for (let i = 1; i < n; i++) if (mu[i] > mu[k]) k = i
-      const w = new Array(n).fill(0)
-      w[k] = 1
-      return w
+      const z = new Array(n).fill(0)
+      z[k] = 1
+      return wFromZ(z, minW)
     }
     case 'min_volatility':
-      return minVolatility(Sigma)
+      return minVolatility(Sigma, minW)
     case 'max_sharpe':
-      return maxSharpeGradient(mu, Sigma, rfAnnual)
+      return maxSharpeGradient(mu, Sigma, rfAnnual, minW)
     case 'max_sortino':
-      return monteCarloBest(
-        n,
-        ww => sortinoAnnual(ww, R, rfDaily),
-        Math.min(60000, 8000 + n * 4000),
-        true
+      return wFromZ(
+        monteCarloBest(
+          n,
+          zz => sortinoAnnual(wFromZ(zz, minW), R, rfDaily),
+          Math.min(60000, 8000 + n * 4000),
+          true
+        ),
+        minW
       )
     case 'min_max_drawdown':
-      return monteCarloBest(
-        n,
-        ww => maxDrawdown(ww, R),
-        Math.min(60000, 8000 + n * 4000),
-        false
+      return wFromZ(
+        monteCarloBest(
+          n,
+          zz => maxDrawdown(wFromZ(zz, minW), R),
+          Math.min(60000, 8000 + n * 4000),
+          false
+        ),
+        minW
       )
     default:
-      return new Array(n).fill(1 / n)
+      return wFromZ(new Array(n).fill(1 / n), minW)
   }
 }
 
+// R: T x n matrix of daily returns
+function sampleCovariance(R: number[][]): number[][] {
+  return covariance(R)
+}
+
+function shrinkToIdentity(
+  Sigma: number[][]
+): { shrunk: number[][]; alpha: number } {
+  const n = Sigma.length
+  // 1) Target: scalar times identity
+  const avgVar = Sigma.reduce((sum, row, i) => sum + row[i], 0) / n
+  const F = avgVar
+
+  // 2) Compute squared Frobenius norm of (Sigma - F I)
+  let sqDiff = 0
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) {
+      const diff = Sigma[i][j] - (i === j ? F : 0)
+      sqDiff += diff * diff
+    }
+  }
+
+  // 3) Estimate alpha (shrinkage intensity) heuristically
+  // For PoC you can start with something simple and conservative:
+  const alpha = Math.min(0.5, Math.max(0.1, sqDiff / (sqDiff + 1e-4)))
+
+  // 4) Blend
+  const shrunk: number[][] = []
+  for (let i = 0; i < n; i++) {
+    shrunk[i] = []
+    for (let j = 0; j < n; j++) {
+      const target = i === j ? F : 0
+      shrunk[i][j] = alpha * target + (1 - alpha) * Sigma[i][j]
+    }
+  }
+
+  return { shrunk, alpha }
+}
 export function runOptimize(
   R: number[][],
   symbols: string[],
   objective: Objective,
-  rfAnnual = 0.04
+  rfAnnual = 0.04,
+  minWeightFraction = 0
 ): OptimizeResult {
-  const wRaw = computeWeights(R, objective, rfAnnual)
-  const weightsArr = normalizeTo100(wRaw)
+  const minW = Math.max(0, minWeightFraction)
+  if (minW > 0 && minW * R[0].length > 1 + 1e-10) {
+    throw new Error('MIN_WEIGHT_INFEASIBLE')
+  }
+  const wRaw = computeWeights(R, objective, rfAnnual, minW)
+  const weightsArr =
+    minW > 0 ? applyMinWeightAfterRound(wRaw, minW) : normalizeTo100(wRaw)
   const weights = symbols.map((s, i) => ({ symbol: s, weight: weightsArr[i] })).sort((a, b) => b.weight - a.weight)
 
   const mu = columnMeans(R)
   const Sigma = covariance(R)
   const rfDaily = Math.pow(1 + rfAnnual, 1 / TRADING_DAYS) - 1
-  const rp = portfolioReturns(R, wRaw)
+  const rp = portfolioReturns(R, weightsArr)
 
   const metrics: MetricBlock = {
     annualizedReturnPct: mean(rp) * TRADING_DAYS * 100,
     annualizedVolatilityPct: stdev(rp) * Math.sqrt(TRADING_DAYS) * 100,
-    sharpe: sharpeAnnual(wRaw, mu, Sigma, rfAnnual),
-    sortino: sortinoAnnual(wRaw, R, rfDaily),
-    maxDrawdownPct: maxDrawdown(wRaw, R) * 100,
+    sharpe: sharpeAnnual(weightsArr, mu, Sigma, rfAnnual),
+    sortino: sortinoAnnual(weightsArr, R, rfDaily),
+    maxDrawdownPct: maxDrawdown(weightsArr, R) * 100,
   }
 
   return {
@@ -337,5 +447,6 @@ export function runOptimize(
     objective,
     metrics,
     sample: { tradingDays: R.length, rfAnnualPct: rfAnnual * 100 },
+    ...(minW > 0 ? { minWeightPct: minW * 100 } : {}),
   }
 }

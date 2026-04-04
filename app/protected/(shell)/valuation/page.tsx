@@ -2,6 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { DCFTab } from './dcf-tab'
 
 /* ─── TYPES ──────────────────────────────────────────────────────────────── */
 
@@ -774,7 +775,9 @@ function ValuationContent() {
   const searchParams = useSearchParams()
   const [symbol, setSymbol] = useState(searchParams.get('symbol')?.toUpperCase() ?? '')
   const [profile, setProfile] = useState<CompanyProfile | null>(null)
-  const [activeTab, setActiveTab] = useState<'dcf' | 'comparables'>('dcf')
+  const [activeTab, setActiveTab] = useState<'dcf' | 'comparables'>(
+    searchParams.get('tab') === 'comparables' ? 'comparables' : 'dcf'
+  )
   const [compsKey, setCompsKey] = useState(0) // increment to re-mount comps on symbol change
 
   useEffect(() => {
@@ -800,8 +803,16 @@ function ValuationContent() {
     const upper = sym.toUpperCase()
     setSymbol(upper)
     setCompsKey(k => k + 1)
-    router.push(`/protected/valuation?symbol=${upper}`, { scroll: false })
-  }, [router])
+    router.push(`/protected/valuation?symbol=${upper}&tab=${activeTab}`, { scroll: false })
+  }, [activeTab, router])
+
+  function switchTab(nextTab: 'dcf' | 'comparables') {
+    setActiveTab(nextTab)
+    const query = symbol
+      ? `/protected/valuation?symbol=${symbol}&tab=${nextTab}`
+      : `/protected/valuation?tab=${nextTab}`
+    router.push(query, { scroll: false })
+  }
 
   return (
     <div style={{ fontFamily: "'DM Sans', sans-serif" }}>
@@ -868,10 +879,10 @@ function ValuationContent() {
 
       {/* Tabs */}
       <div className="tab-bar" style={{ marginBottom: 28 }}>
-        <button className={`tab${activeTab === 'dcf' ? ' active' : ''}`} onClick={() => setActiveTab('dcf')}>
+        <button className={`tab${activeTab === 'dcf' ? ' active' : ''}`} onClick={() => switchTab('dcf')}>
           DCF Valuation
         </button>
-        <button className={`tab${activeTab === 'comparables' ? ' active' : ''}`} onClick={() => setActiveTab('comparables')}>
+        <button className={`tab${activeTab === 'comparables' ? ' active' : ''}`} onClick={() => switchTab('comparables')}>
           Comparables
         </button>
       </div>
@@ -879,13 +890,7 @@ function ValuationContent() {
       {/* Tab content */}
       {activeTab === 'dcf' && (
         symbol ? (
-          <div className="card" style={{ padding: '32px 36px', textAlign: 'center' }}>
-            <div style={{ fontSize: 28, marginBottom: 16, opacity: 0.35 }}>⊞</div>
-            <div style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 6 }}>DCF Model — Coming Soon</div>
-            <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
-              Adjustable WACC, growth rates, terminal value assumptions, and intrinsic value output.
-            </div>
-          </div>
+          <DCFTab symbol={symbol} currentPrice={profile?.price ?? null} />
         ) : <EmptyState />
       )}
 
