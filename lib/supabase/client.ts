@@ -18,6 +18,9 @@ function createMissingBrowserClient() {
       async getUser() {
         return { data: { user: null }, error: null }
       },
+      async updateUser() {
+        return { data: { user: null }, error: { message: 'Supabase environment variables are not configured.' } }
+      },
     },
   }
 }
