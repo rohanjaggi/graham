@@ -7,9 +7,161 @@ import { createClient } from '@/lib/supabase/client'
 
 type NavItem = { label: string; href?: string }
 
+type UserProfile = {
+  email: string
+  firstName: string
+  fullName: string
+}
+
+function ProfileModal({ profile, onClose, onSave }: {
+  profile: UserProfile
+  onClose: () => void
+  onSave: (firstName: string) => Promise<void>
+}) {
+  const [firstName, setFirstName] = useState(profile.firstName)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState(false)
+
+  async function handleSave() {
+    if (!firstName.trim()) return
+    setSaving(true)
+    setError('')
+    setSuccess(false)
+    try {
+      await onSave(firstName.trim())
+      setSuccess(true)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to save')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 1000,
+        background: 'rgba(0,0,0,0.6)', display: 'flex',
+        alignItems: 'center', justifyContent: 'center',
+      }}
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div style={{
+        background: 'var(--bg-surface)', border: '1px solid var(--border-bright)',
+        borderRadius: 14, padding: '32px 36px', width: 400,
+        boxShadow: '0 24px 64px rgba(0,0,0,0.5)',
+      }}>
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28 }}>
+          <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '-0.01em' }}>
+            Profile
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 18, lineHeight: 1, padding: 4 }}
+          >
+            ×
+          </button>
+        </div>
+
+        {/* Avatar */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 28 }}>
+          <div style={{
+            width: 52, height: 52, borderRadius: '50%',
+            background: 'linear-gradient(135deg, var(--gold-bright), var(--gold))',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 20, fontWeight: 700, color: '#0A0C12', flexShrink: 0,
+          }}>
+            {firstName?.[0]?.toUpperCase() ?? '·'}
+          </div>
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>
+              {firstName || '—'}
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+              {profile.email}
+            </div>
+          </div>
+        </div>
+
+        {/* Fields */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div>
+            <label style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.1em', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>
+              Display Name
+            </label>
+            <input
+              className="input-dark"
+              value={firstName}
+              onChange={e => { setFirstName(e.target.value); setSuccess(false) }}
+              onKeyDown={e => { if (e.key === 'Enter') void handleSave() }}
+              placeholder="Your name"
+              style={{ width: '100%' }}
+            />
+          </div>
+
+          <div>
+            <label style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.1em', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>
+              Email
+            </label>
+            <input
+              className="input-dark"
+              value={profile.email}
+              disabled
+              style={{ width: '100%', opacity: 0.5, cursor: 'not-allowed' }}
+            />
+          </div>
+        </div>
+
+        {/* Feedback */}
+        {error && (
+          <div style={{ fontSize: 12, color: 'var(--red)', marginTop: 12 }}>{error}</div>
+        )}
+        {success && (
+          <div style={{ fontSize: 12, color: 'var(--green)', marginTop: 12 }}>Name updated successfully.</div>
+        )}
+
+        {/* Actions */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 24 }}>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              fontSize: 13, padding: '8px 18px', borderRadius: 6,
+              background: 'none', border: '1px solid var(--border)', color: 'var(--text-secondary)',
+              cursor: 'pointer', fontFamily: "'DM Sans', sans-serif",
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleSave()}
+            disabled={saving || !firstName.trim()}
+            style={{
+              fontSize: 13, padding: '8px 18px', borderRadius: 6,
+              background: 'linear-gradient(135deg, var(--gold-bright), var(--gold))',
+              border: 'none', color: '#0A0C12', fontWeight: 600,
+              cursor: saving || !firstName.trim() ? 'not-allowed' : 'pointer',
+              opacity: saving || !firstName.trim() ? 0.6 : 1,
+              fontFamily: "'DM Sans', sans-serif",
+            }}
+          >
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 const NAV: { section: string; items: NavItem[] }[] = [
   { section: 'ANALYSIS',  items: [{ label: 'Overview', href: '/protected' }, { label: 'Research', href: '/protected/research' }, { label: 'Technical' }] },
+  { section: 'ANALYSIS',  items: [{ label: 'Overview', href: '/protected' }, { label: 'Research', href: '/protected/research' }, { label: 'Technical' }] },
   { section: 'VALUATION', items: [{ label: 'Valuation', href: '/protected/valuation' }] },
+  { section: 'PORTFOLIO', items: [{ label: 'Optimiser', href: '/protected/optimiser' }, { label: 'Portfolios', href: '/protected/portfolios' }, { label: 'Tail Risk', href: '/protected/tail-risk' }] },
   { section: 'PORTFOLIO', items: [{ label: 'Optimiser', href: '/protected/optimiser' }, { label: 'Portfolios', href: '/protected/portfolios' }, { label: 'Tail Risk', href: '/protected/tail-risk' }] },
 ]
 
@@ -52,6 +204,7 @@ function Sidebar() {
               const icon =
                 label === 'Overview' ? '⬡' : label === 'Research' ? '⊕' : label === 'Technical' ? '△' :
                 label === 'Valuation' ? '⊞' :
+                label === 'Portfolios' ? '●' :
                 label === 'Portfolios' ? '●' :
                 label === 'Optimiser' ? '◎' : '◐'
               const active = href ? isActive(href) : false
@@ -131,6 +284,42 @@ async function resolveBestSymbol(rawQuery: string, seededResults: SearchResult[]
 
   return normalized[0]?.symbol?.toUpperCase() ?? (TICKER_PATTERN.test(uppercase) ? uppercase : null)
 }
+const TICKER_PATTERN = /^[A-Z][A-Z0-9.-]{0,9}$/
+
+async function tickerExists(symbol: string): Promise<boolean> {
+  try {
+    const response = await fetch(`/api/ticker/${encodeURIComponent(symbol)}`)
+    return response.ok
+  } catch {
+    return false
+  }
+}
+
+async function resolveBestSymbol(rawQuery: string, seededResults: SearchResult[] = []): Promise<string | null> {
+  const trimmed = rawQuery.trim()
+  if (!trimmed) return null
+
+  const uppercase = trimmed.toUpperCase()
+  const ranked = seededResults.length > 0
+    ? seededResults
+    : await fetch(`/api/ticker/search?q=${encodeURIComponent(trimmed)}`)
+        .then((response) => response.ok ? response.json() : [])
+        .then((data) => Array.isArray(data) ? data : [])
+        .catch(() => [])
+
+  const normalized = ranked.filter((item): item is SearchResult => {
+    return typeof item?.symbol === 'string' && typeof item?.description === 'string'
+  })
+
+  const exact = normalized.find((item) => item.symbol.toUpperCase() === uppercase)
+  if (exact) return exact.symbol.toUpperCase()
+
+  if (TICKER_PATTERN.test(uppercase) && await tickerExists(uppercase)) {
+    return uppercase
+  }
+
+  return normalized[0]?.symbol?.toUpperCase() ?? (TICKER_PATTERN.test(uppercase) ? uppercase : null)
+}
 
 function TopBar() {
   const router = useRouter()
@@ -141,6 +330,8 @@ function TopBar() {
   const [results, setResults] = useState<SearchResult[]>([])
   const [searching, setSearching] = useState(false)
   const [open, setOpen] = useState(false)
+  const [profileOpen, setProfileOpen] = useState(false)
+  const [userProfile, setUserProfile] = useState<UserProfile>({ email: '', firstName: '', fullName: '' })
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const searchWrapRef = useRef<HTMLDivElement>(null)
 
@@ -156,9 +347,12 @@ function TopBar() {
     }) => {
       if (!response.data.user) return
       const meta = response.data.user.user_metadata
-      const name = meta?.first_name || meta?.full_name?.split(' ')[0] || response.data.user.email?.split('@')[0] || 'User'
-      setDisplayName(name)
-      setInitial(name[0].toUpperCase())
+      const email = response.data.user.email ?? ''
+      const firstName = meta?.first_name || meta?.full_name?.split(' ')[0] || email.split('@')[0] || 'User'
+      const fullName = meta?.full_name || firstName
+      setDisplayName(firstName)
+      setInitial(firstName[0].toUpperCase())
+      setUserProfile({ email, firstName, fullName })
     })
 
     async function loadMarket() {
@@ -218,6 +412,17 @@ function TopBar() {
     if (resolved) handleSelect(resolved)
   }
 
+  async function handleSaveProfile(newFirstName: string) {
+    const supabase = createClient()
+    const { error } = await supabase.auth.updateUser({
+      data: { first_name: newFirstName, full_name: newFirstName },
+    })
+    if (error) throw new Error(error.message)
+    setDisplayName(newFirstName)
+    setInitial(newFirstName[0].toUpperCase())
+    setUserProfile(p => ({ ...p, firstName: newFirstName, fullName: newFirstName }))
+  }
+
   async function handleSignOut() {
     const supabase = createClient()
     await supabase.auth.signOut()
@@ -225,6 +430,7 @@ function TopBar() {
   }
 
   return (
+    <>
     <header style={{
       height: 56, borderBottom: '1px solid var(--border)',
       display: 'flex', alignItems: 'center', padding: '0 28px', gap: 20,
@@ -236,8 +442,16 @@ function TopBar() {
           className="input-dark"
           style={{ paddingLeft: 36 }}
           placeholder="Search ticker or company..."
+          placeholder="Search ticker or company..."
           value={query}
           onChange={handleQueryChange}
+          onKeyDown={e => {
+            if (e.key === 'Escape') { setOpen(false); setQuery('') }
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              void handleSubmitSearch(query)
+            }
+          }}
           onKeyDown={e => {
             if (e.key === 'Escape') { setOpen(false); setQuery('') }
             if (e.key === 'Enter') {
@@ -290,14 +504,23 @@ function TopBar() {
         ))}
         <div style={{ width: 1, height: 28, background: 'var(--border)' }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ position: 'relative', width: 28, height: 28, flexShrink: 0 }}>
-              <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'linear-gradient(135deg, var(--gold-bright), var(--gold))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#0A0C12' }}>
-                {initial}
-              </div>
+          <button
+            type="button"
+            onClick={() => setProfileOpen(true)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              background: 'none', border: 'none', cursor: 'pointer', padding: '4px 6px',
+              borderRadius: 6, transition: 'background 0.15s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-elevated)' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'none' }}
+            title="Edit profile"
+          >
+            <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'linear-gradient(135deg, var(--gold-bright), var(--gold))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#0A0C12', flexShrink: 0 }}>
+              {initial}
             </div>
             <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{displayName}</span>
-          </div>
+          </button>
           <button
             type="button"
             onClick={handleSignOut}
@@ -310,6 +533,14 @@ function TopBar() {
         </div>
       </div>
     </header>
+    {profileOpen && (
+      <ProfileModal
+        profile={userProfile}
+        onClose={() => setProfileOpen(false)}
+        onSave={handleSaveProfile}
+      />
+    )}
+    </>
   )
 }
 
@@ -379,4 +610,5 @@ export function ProtectedShell({ children }: { children: React.ReactNode }) {
     </div>
   )
 }
+
 
