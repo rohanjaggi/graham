@@ -311,6 +311,11 @@ function TopBar() {
       const name = meta?.first_name || meta?.full_name?.split(' ')[0] || response.data.user.email?.split('@')[0] || 'User'
       setDisplayName(name)
       setInitial(name[0].toUpperCase())
+      setUserProfile({
+        email: response.data.user.email ?? '',
+        firstName: meta?.first_name ?? name,
+        fullName: meta?.full_name ?? '',
+      })
     })
 
     async function loadMarket() {
@@ -368,6 +373,14 @@ function TopBar() {
 
     const resolved = await resolveBestSymbol(trimmed, results)
     if (resolved) handleSelect(resolved)
+  }
+
+  async function handleSaveProfile(firstName: string) {
+    const supabase = createClient()
+    await supabase.auth.updateUser({ data: { first_name: firstName } })
+    setDisplayName(firstName)
+    setInitial(firstName[0].toUpperCase())
+    setUserProfile(prev => ({ ...prev, firstName }))
   }
 
   async function handleSignOut() {
