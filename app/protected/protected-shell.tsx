@@ -347,12 +347,23 @@ function TopBar() {
     }) => {
       if (!response.data.user) return
       const meta = response.data.user.user_metadata
+<<<<<<< HEAD
       const email = response.data.user.email ?? ''
       const firstName = meta?.first_name || meta?.full_name?.split(' ')[0] || email.split('@')[0] || 'User'
       const fullName = meta?.full_name || firstName
       setDisplayName(firstName)
       setInitial(firstName[0].toUpperCase())
       setUserProfile({ email, firstName, fullName })
+=======
+      const name = meta?.first_name || meta?.full_name?.split(' ')[0] || response.data.user.email?.split('@')[0] || 'User'
+      setDisplayName(name)
+      setInitial(name[0].toUpperCase())
+      setUserProfile({
+        email: response.data.user.email ?? '',
+        firstName: meta?.first_name ?? name,
+        fullName: meta?.full_name ?? '',
+      })
+>>>>>>> 1845f35 (fix: handle profile save)
     })
 
     async function loadMarket() {
@@ -412,6 +423,7 @@ function TopBar() {
     if (resolved) handleSelect(resolved)
   }
 
+<<<<<<< HEAD
   async function handleSaveProfile(newFirstName: string) {
     const supabase = createClient()
     const { error } = await supabase.auth.updateUser({
@@ -421,6 +433,14 @@ function TopBar() {
     setDisplayName(newFirstName)
     setInitial(newFirstName[0].toUpperCase())
     setUserProfile(p => ({ ...p, firstName: newFirstName, fullName: newFirstName }))
+=======
+  async function handleSaveProfile(firstName: string) {
+    const supabase = createClient()
+    await supabase.auth.updateUser({ data: { first_name: firstName } })
+    setDisplayName(firstName)
+    setInitial(firstName[0].toUpperCase())
+    setUserProfile(prev => ({ ...prev, firstName }))
+>>>>>>> 1845f35 (fix: handle profile save)
   }
 
   async function handleSignOut() {
