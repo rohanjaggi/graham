@@ -39,7 +39,7 @@ const CreateBodySchema = z.object({
 })
 
 function normalizeHorizonBucket(value: string | undefined): '<3y' | '3-7y' | '>7y' {
-  const normalized = (value ?? '3-7y').replace(/â€“|–/g, '-').trim()
+  const normalized = (value ?? '3-7y').replaceAll(/â€“|–/g, '-').trim()
   if (normalized === '<3y' || normalized === '3-7y' || normalized === '>7y') return normalized
   return '3-7y'
 }
