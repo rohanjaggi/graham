@@ -158,7 +158,7 @@ function ProfileModal({ profile, onClose, onSave }: {
 }
 
 const NAV: { section: string; items: NavItem[] }[] = [
-  { section: 'ANALYSIS',  items: [{ label: 'Overview', href: '/protected' }, { label: 'Research', href: '/protected/research' }, { label: 'Technical' }] },
+  { section: 'ANALYSIS',  items: [{ label: 'Overview', href: '/protected' }, { label: 'Research', href: '/protected/research' }, { label: 'Screener', href: '/protected/qa' }, { label: 'Technical' }] },
   { section: 'VALUATION', items: [{ label: 'Valuation', href: '/protected/valuation' }] },
   { section: 'PORTFOLIO', items: [{ label: 'Optimiser', href: '/protected/optimiser' }, { label: 'Portfolios', href: '/protected/portfolios' }, { label: 'Tail Risk', href: '/protected/tail-risk' }] },
 ]
@@ -200,7 +200,7 @@ function Sidebar() {
             </div>
             {items.map(({ label, href }) => {
               const icon =
-                label === 'Overview' ? '⬡' : label === 'Research' ? '⊕' : label === 'Technical' ? '△' :
+                label === 'Overview' ? '⬡' : label === 'Research' ? '⊕' : label === 'Screener' ? '⊟' : label === 'Technical' ? '△' :
                 label === 'Valuation' ? '⊞' :
                 label === 'Portfolios' ? '●' :
                 label === 'Optimiser' ? '◎' : '◐'
