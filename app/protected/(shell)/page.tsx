@@ -347,12 +347,12 @@ function OverviewPanel({ latestPortfolios }: { latestPortfolios: DashboardPortfo
             href: '/protected/research',
           },
           {
-            title: 'Technical Analysis',
-            badge: 'Coming soon',
-            badgeColor: 'var(--text-muted)',
-            desc: 'This module is still in roadmap status, so it is shown as planned instead of linking to a dead-end page.',
-            cta: 'Planned module',
-            href: '',
+            title: 'Stock Screener',
+            badge: 'Active',
+            badgeColor: 'var(--green)',
+            desc: 'Filter the market by fundamentals and technicals — P/E, ROE, margin, market cap, YTD return, and more.',
+            cta: 'Open screener →',
+            href: '/protected/qa',
           },
         ].map((cardData, i) => {
           const card = (
