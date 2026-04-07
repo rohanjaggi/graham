@@ -68,7 +68,7 @@ export default function ResearchResultsPage() {
   }, [query])
 
   return (
-    <div className="animate-fade-up d1" style={{ maxWidth: 1120, margin: '4.5vh auto 0', padding: '0 16px 28px' }}>
+    <div className="animate-fade-up d1" style={{ width: '100%', margin: '4.5vh 0 0', padding: '0 4px 28px' }}>
       <section className="card" style={{ padding: '22px 0 0', overflow: 'hidden' }}>
         <div style={{ padding: '0 26px 18px' }}>
           <div style={{ fontSize: 11, letterSpacing: '0.14em', color: 'var(--gold-dim)', textTransform: 'uppercase', fontWeight: 600 }}>
