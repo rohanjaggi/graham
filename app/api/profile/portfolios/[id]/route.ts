@@ -1,9 +1,11 @@
 ﻿import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
+import { fetchMergedCompanySnapshot } from '@/lib/market/companySnapshot'
 
 type PortfolioRow = Record<string, unknown>
 type PositionRow = Record<string, unknown>
+type PositionMetadata = { companyName: string | null; pe: number | null; sector: string | null }
 
 const PatchBodySchema = z.object({
   name: z.string().min(1).max(200).optional(),
@@ -13,6 +15,9 @@ const PatchBodySchema = z.object({
 interface RouteParams {
   params: Promise<{ id: string }>
 }
+
+const POSITION_METADATA_TTL_MS = 30 * 60 * 1000
+const positionMetadataCache = new Map<string, { expiresAt: number; value: PositionMetadata }>()
 
 async function fetchSectorBySymbol(symbols: string[]): Promise<Record<string, string | null>> {
   const apiKey = process.env.FINNHUB_API_KEY
@@ -40,6 +45,54 @@ async function fetchSectorBySymbol(symbols: string[]): Promise<Record<string, st
   )
 
   return Object.fromEntries(entries)
+}
+
+async function fetchPositionMetadata(symbols: string[]): Promise<Record<string, PositionMetadata>> {
+  const apiKey = process.env.FINNHUB_API_KEY
+  if (!apiKey || symbols.length === 0) return {}
+
+  const now = Date.now()
+  const cachedEntries: Array<readonly [string, PositionMetadata]> = []
+  const missingSymbols: string[] = []
+
+  for (const symbol of symbols) {
+    const cached = positionMetadataCache.get(symbol)
+    if (cached && cached.expiresAt > now) {
+      cachedEntries.push([symbol, cached.value] as const)
+    } else {
+      missingSymbols.push(symbol)
+    }
+  }
+
+  const entries = await Promise.all(
+    missingSymbols.map(async (symbol) => {
+      try {
+        const snapshot = await fetchMergedCompanySnapshot(symbol, apiKey)
+        const pe =
+          typeof snapshot?.metrics?.peNormalizedAnnual === 'number' ? snapshot.metrics.peNormalizedAnnual
+          : typeof snapshot?.metrics?.peTTM === 'number' ? snapshot.metrics.peTTM
+          : typeof snapshot?.metrics?.peBasicExclExtraTTM === 'number' ? snapshot.metrics.peBasicExclExtraTTM
+          : null
+
+        const value = {
+          companyName: snapshot?.name ?? null,
+          pe,
+          sector: snapshot?.sector ?? null,
+        }
+        positionMetadataCache.set(symbol, { expiresAt: now + POSITION_METADATA_TTL_MS, value })
+        return [
+          symbol,
+          value,
+        ] as const
+      } catch {
+        const value = { companyName: null, pe: null, sector: null }
+        positionMetadataCache.set(symbol, { expiresAt: now + 5 * 60 * 1000, value })
+        return [symbol, value] as const
+      }
+    })
+  )
+
+  return Object.fromEntries([...cachedEntries, ...entries])
 }
 
 export async function GET(_req: NextRequest, { params }: RouteParams) {
@@ -75,6 +128,10 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
 
   const portfolioRow = portfolio as PortfolioRow
   const positionRows = (positions ?? []) as PositionRow[]
+  const symbols = positionRows
+    .map((position) => (typeof position.symbol === 'string' ? position.symbol : null))
+    .filter((symbol): symbol is string => Boolean(symbol))
+
   const missingSectorSymbols = positionRows
     .filter((position) => position.sector == null && typeof position.symbol === 'string')
     .map((position) => String(position.symbol))
@@ -101,6 +158,8 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
     }
   }
 
+  const metadataBySymbol = await fetchPositionMetadata(symbols)
+
   return NextResponse.json({
     portfolio: {
       id: portfolioRow.id,
@@ -124,11 +183,17 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
       createdAt: portfolioRow.created_at,
       updatedAt: portfolioRow.updated_at,
     },
-    positions: positionRows.map((position) => ({
-      symbol: position.symbol,
-      weight: Number(position.weight),
-      sector: position.sector ?? null,
-    })),
+    positions: positionRows.map((position) => {
+      const symbol = String(position.symbol)
+      const metadata = metadataBySymbol[symbol]
+      return {
+        symbol,
+        weight: Number(position.weight),
+        sector: position.sector ?? metadata?.sector ?? null,
+        companyName: metadata?.companyName ?? symbol,
+        pe: metadata?.pe ?? null,
+      }
+    }),
   })
 }
 

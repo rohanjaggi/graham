@@ -1,62 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
 import { createClient } from '@/lib/supabase/server'
+import { fetchLatestAnnualFilingExcerpt } from '@/lib/sec/edgar'
 
 function getOpenAIClient() {
   return new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 }
-
-/* ─── SEC EDGAR: map ticker → CIK, then fetch 10-K excerpt ─────────────── */
-
-async function fetchSecExcerpt(symbol: string): Promise<string | null> {
-  try {
-    // 1. Get CIK from SEC ticker mapping (cached daily by SEC)
-    const tickerMap = await fetch('https://www.sec.gov/files/company_tickers.json', {
-      headers: { 'User-Agent': 'Graham-App contact@graham.app' },
-      next: { revalidate: 86400 },
-    }).then(r => r.json())
-
-    const entry = Object.values(tickerMap as Record<string, { cik_str: number; ticker: string; title: string }>)
-      .find(e => e.ticker.toUpperCase() === symbol.toUpperCase())
-
-    if (!entry) return null
-
-    const cik = String(entry.cik_str).padStart(10, '0')
-
-    // 2. Get latest 10-K filing from submissions API
-    const submissions = await fetch(`https://data.sec.gov/submissions/CIK${cik}.json`, {
-      headers: { 'User-Agent': 'Graham-App contact@graham.app' },
-      next: { revalidate: 86400 },
-    }).then(r => r.json())
-
-    const filings = submissions.filings?.recent
-    if (!filings) return null
-
-    const idx = filings.form?.findIndex((f: string) => f === '10-K')
-    if (idx === -1 || idx == null) return null
-
-    const accession = filings.accessionNumber[idx].replace(/-/g, '')
-    const docList = await fetch(
-      `https://www.sec.gov/Archives/edgar/data/${entry.cik_str}/${accession}/${filings.primaryDocument[idx]}`,
-      { headers: { 'User-Agent': 'Graham-App contact@graham.app' }, next: { revalidate: 86400 } }
-    ).then(r => r.text())
-
-    // Strip HTML tags and collapse whitespace, keep first ~6000 chars
-    const text = docList
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/&nbsp;/g, ' ')
-      .replace(/&amp;/g, '&')
-      .replace(/\s{2,}/g, ' ')
-      .trim()
-      .slice(0, 6000)
-
-    return text || null
-  } catch {
-    return null
-  }
-}
-
-/* ─── ROUTE ─────────────────────────────────────────────────────────────── */
 
 export async function GET(
   _req: NextRequest,
@@ -75,16 +24,16 @@ export async function GET(
 
   const base = 'https://finnhub.io/api/v1'
   const today = new Date()
-  const from = new Date(today); from.setDate(today.getDate() - 30)
+  const from = new Date(today)
+  from.setDate(today.getDate() - 30)
   const toStr = today.toISOString().split('T')[0]
   const fromStr = from.toISOString().split('T')[0]
 
-  // Fetch context data in parallel
   const [profileRes, metricsRes, newsRes, secText] = await Promise.all([
-    fetch(`${base}/stock/profile2?symbol=${sym}&token=${fKey}`, { next: { revalidate: 3600 } }).then(r => r.json()).catch(() => ({})),
-    fetch(`${base}/stock/metric?symbol=${sym}&metric=all&token=${fKey}`, { next: { revalidate: 3600 } }).then(r => r.json()).catch(() => ({})),
-    fetch(`${base}/company-news?symbol=${sym}&from=${fromStr}&to=${toStr}&token=${fKey}`, { next: { revalidate: 900 } }).then(r => r.json()).catch(() => []),
-    fetchSecExcerpt(sym),
+    fetch(`${base}/stock/profile2?symbol=${sym}&token=${fKey}`, { next: { revalidate: 3600 } }).then((r) => r.json()).catch(() => ({})),
+    fetch(`${base}/stock/metric?symbol=${sym}&metric=all&token=${fKey}`, { next: { revalidate: 3600 } }).then((r) => r.json()).catch(() => ({})),
+    fetch(`${base}/company-news?symbol=${sym}&from=${fromStr}&to=${toStr}&token=${fKey}`, { next: { revalidate: 900 } }).then((r) => r.json()).catch(() => []),
+    fetchLatestAnnualFilingExcerpt(sym, 6000),
   ])
 
   if (!profileRes?.name) {
@@ -92,7 +41,9 @@ export async function GET(
   }
 
   const metrics = metricsRes?.metric ?? {}
-  const recentNews = Array.isArray(newsRes) ? newsRes.slice(0, 8).map((n: { headline: string; source: string }) => `• ${n.headline} (${n.source})`).join('\n') : ''
+  const recentNews = Array.isArray(newsRes)
+    ? newsRes.slice(0, 8).map((n: { headline: string; source: string }) => `- ${n.headline} (${n.source})`).join('\n')
+    : ''
 
   const contextBlock = `
 COMPANY: ${profileRes.name} (${sym})
@@ -100,7 +51,7 @@ SECTOR: ${profileRes.finnhubIndustry ?? '—'} | EXCHANGE: ${profileRes.exchange
 MARKET CAP: ${profileRes.marketCapitalization ? `$${(profileRes.marketCapitalization / 1000).toFixed(1)}B` : '—'}
 
 KEY METRICS:
-- P/E (TTM): ${metrics.peTTM ?? '—'}
+- P/E (TTM): ${metrics.peTTM ?? metrics.peBasicExclExtraTTM ?? '—'}
 - EV/EBITDA: ${metrics.evEbitdaTTM ?? '—'}
 - ROE (TTM): ${metrics.roeTTM != null ? `${metrics.roeTTM.toFixed(1)}%` : '—'}
 - Revenue Growth YoY: ${metrics.revenueGrowthTTMYoy != null ? `${metrics.revenueGrowthTTMYoy.toFixed(1)}%` : '—'}
@@ -149,7 +100,11 @@ Be specific and data-driven. Reference actual metrics where relevant. Do not hal
 
   const raw = completion.choices[0].message.content ?? '{}'
   let analysis
-  try { analysis = JSON.parse(raw) } catch { analysis = { error: 'Failed to parse analysis' } }
+  try {
+    analysis = JSON.parse(raw)
+  } catch {
+    analysis = { error: 'Failed to parse analysis' }
+  }
 
   return NextResponse.json({ symbol: sym, name: profileRes.name, analysis })
 }

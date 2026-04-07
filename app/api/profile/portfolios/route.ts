@@ -1,11 +1,17 @@
 ﻿import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
+import {
+  normalizeHorizonBucket,
+  SIMPLE_MODE_PRESETS,
+  type RiskTolerance,
+} from '@/lib/portfolio/simpleMode'
 import { createClient } from '@/lib/supabase/server'
 
 type PortfolioRow = Record<string, unknown>
 
 const OptimizeRequestSchema = z.object({
   objective: z.enum(['max_sharpe', 'max_sortino', 'max_return', 'min_volatility', 'min_max_drawdown']).optional(),
+  simple_mode: z.boolean().optional(),
   asset_tickers: z.array(z.string()).min(3).max(15),
   lookback_period_years: z.number().int().min(1).max(5).optional(),
   investment_horizon_bucket: z.string().optional(),
@@ -37,12 +43,6 @@ const CreateBodySchema = z.object({
   optimizeRequest: OptimizeRequestSchema,
   optimizeResult: OptimizeResultSchema,
 })
-
-function normalizeHorizonBucket(value: string | undefined): '<3y' | '3-7y' | '>7y' {
-  const normalized = (value ?? '3-7y').replaceAll(/â€“|–/g, '-').trim()
-  if (normalized === '<3y' || normalized === '3-7y' || normalized === '>7y') return normalized
-  return '3-7y'
-}
 
 async function fetchSectorBySymbol(symbols: string[]): Promise<Record<string, string | null>> {
   const apiKey = process.env.FINNHUB_API_KEY
@@ -150,16 +150,20 @@ export async function POST(req: NextRequest) {
     weight: weight / weightSum,
   }))
   const sectorBySymbol = await fetchSectorBySymbol(normalizedWeights.map((entry) => entry.symbol))
+  const riskTolerance = (optimizeRequest?.risk_tolerance ?? 'MODERATE') as RiskTolerance
+  const simplePreset = optimizeRequest?.simple_mode === true ? SIMPLE_MODE_PRESETS[riskTolerance] : null
 
   const insertPayload = {
     user_id: authData.user.id,
     name,
     notes: notes ?? null,
     objective: optimizeRequest?.objective ?? 'max_sharpe',
-    investment_horizon_bucket: normalizeHorizonBucket(optimizeRequest?.investment_horizon_bucket),
-    risk_tolerance: optimizeRequest?.risk_tolerance ?? 'MODERATE',
-    universe_filter: optimizeRequest?.universe_filter ?? 'US_LARGE_CAP',
-    lookback_period_years: optimizeRequest?.lookback_period_years ?? 5,
+    investment_horizon_bucket: normalizeHorizonBucket(
+      optimizeRequest?.investment_horizon_bucket ?? simplePreset?.investment_horizon_bucket ?? '3-7y'
+    ) ?? '3-7y',
+    risk_tolerance: riskTolerance,
+    universe_filter: optimizeRequest?.universe_filter ?? simplePreset?.universe_filter ?? 'US_ALL_CAP',
+    lookback_period_years: optimizeRequest?.lookback_period_years ?? simplePreset?.lookback_period_years ?? 5,
     expected_annual_return: optimizeResult.expected_annual_return,
     expected_annual_volatility: optimizeResult.expected_annual_volatility,
     sharpe_ratio: optimizeResult.sharpe_ratio,
@@ -208,3 +212,4 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ id: inserted.id }, { status: 201 })
 }
+
