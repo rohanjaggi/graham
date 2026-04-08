@@ -1281,55 +1281,6 @@ export default function TickerPage() {
                       )
                     })()}
 
-                    {/* ── Balance Sheet tab: Revenue stream breakdown (SEC EDGAR) ── */}
-                    {stmtTab === 'balance' && (() => {
-                      const segs = financials.segments
-                      if (!segs || segs.length < 2) return (
-                        <div className="card" style={{ padding: '20px 28px 24px', marginBottom: 24, color: 'var(--text-muted)', fontSize: 13 }}>
-                          Revenue segment data unavailable for this company.
-                        </div>
-                      )
-                      const SCOLS = ['var(--gold)', '#7eb8f7', '#7bcfa8', '#e07b7b', '#b07bf7', '#f7c97b', '#7bf7f0']
-                      const r = 56; const cx = 72; const cy = 72; let cumPct = 0
-                      const donut = segs.map((s, i) => {
-                        const start = cumPct / 100 * 2 * Math.PI - Math.PI / 2; cumPct += s.pct
-                        const end   = cumPct / 100 * 2 * Math.PI - Math.PI / 2
-                        const x1 = cx + r * Math.cos(start); const y1 = cy + r * Math.sin(start)
-                        const x2 = cx + r * Math.cos(end);   const y2 = cy + r * Math.sin(end)
-                        return { ...s, color: SCOLS[i % SCOLS.length], d: `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${s.pct > 50 ? 1 : 0} 1 ${x2} ${y2} Z` }
-                      })
-                      return (
-                        <div className="card" style={{ padding: '20px 28px 24px', marginBottom: 24 }}>
-                          <div style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 18 }}>Revenue by Segment (Most Recent Year · SEC EDGAR)</div>
-                          <div style={{ display: 'flex', gap: 32, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-                            <svg width={144} height={144} style={{ flexShrink: 0 }}>
-                              {donut.map((s, i) => <path key={i} d={s.d} fill={s.color} opacity={0.85} />)}
-                              <circle cx={cx} cy={cy} r={r - 18} fill="var(--bg-surface)" />
-                            </svg>
-                            <div style={{ flex: 1, minWidth: 220 }}>
-                              <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '0 20px', fontSize: 12 }}>
-                                <span style={{ color: 'var(--text-muted)', fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.06em', paddingBottom: 8 }}>Segment</span>
-                                <span style={{ color: 'var(--text-muted)', fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.06em', paddingBottom: 8 }}>Share</span>
-                                <span style={{ color: 'var(--text-muted)', fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.06em', paddingBottom: 8 }}>YoY</span>
-                                {donut.map((s, i) => (
-                                  <React.Fragment key={i}>
-                                    <span style={{ color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8, paddingBottom: 6 }}>
-                                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: s.color, display: 'inline-block', flexShrink: 0 }} />
-                                      {s.name}
-                                    </span>
-                                    <span style={{ color: 'var(--text-secondary)', paddingBottom: 6, fontVariantNumeric: 'tabular-nums' }}>{s.pct.toFixed(1)}%</span>
-                                    <span style={{ paddingBottom: 6, fontVariantNumeric: 'tabular-nums', color: s.growthYoy == null ? 'var(--text-muted)' : s.growthYoy >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                                      {s.growthYoy == null ? '—' : `${s.growthYoy >= 0 ? '+' : ''}${s.growthYoy.toFixed(1)}%`}
-                                    </span>
-                                  </React.Fragment>
-                                ))}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      )
-                    })()}
-
                       {/* Statement table */}
                       {financials.years.length === 0 ? (
                         <div style={{ fontSize: 13, color: 'var(--text-muted)', textAlign: 'center', padding: '24px 0' }}>No annual filing data available.</div>
