@@ -818,8 +818,9 @@ function ValuationContent() {
     <div style={{ fontFamily: "'DM Sans', sans-serif" }}>
       {/* Page header */}
       <div style={{ marginBottom: 28 }}>
-        <div className="font-display" style={{ fontSize: 26, fontWeight: 500, marginBottom: 4 }}>Valuation</div>
-        <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>DCF and comparable company analysis</div>
+        <div style={{ fontSize: 11, letterSpacing: '0.14em', color: 'var(--gold-dim)', textTransform: 'uppercase', fontWeight: 600, marginBottom: 6 }}>Valuation</div>
+        <h1 className="font-display text-gold-gradient" style={{ fontSize: 42, fontWeight: 500, lineHeight: 1.05, marginBottom: 8 }}>Valuation</h1>
+        <div style={{ fontSize: 13.5, color: 'var(--text-muted)', lineHeight: 1.65 }}>DCF and comparable company analysis</div>
       </div>
 
       {/* Ticker search */}

@@ -114,11 +114,188 @@ function buildRows(
   }))
 }
 
+const EDGAR_UA = { 'User-Agent': 'Graham-App contact@graham.app' }
+
+function parseCells(html: string): string[] {
+  return [...html.matchAll(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi)]
+    .map(m => m[1]
+      .replace(/<[^>]+>/g, '')
+      .replace(/&nbsp;|&#160;/g, ' ')
+      .replace(/&#\d+;/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+    )
+    .filter(c => c && c !== ' ')
+}
+
+function parseNumber(s: string): number | null {
+  const cleaned = s.replace(/\$/, '').replace(/,/g, '').replace(/\(([0-9.,]+)\)/, '-$1').trim()
+  const n = parseFloat(cleaned)
+  return Number.isFinite(n) ? n : null
+}
+
+// Parse segment revenue from an EDGAR R*.htm XBRL viewer report file.
+// The file lists segments as section headers followed by "Revenue from contract
+// with customers" (or "Revenues") rows with dollar values per year.
+function parseSegmentReportHtml(html: string): Array<{ name: string; values: number[] }> | null {
+  const cells = parseCells(html)
+
+  // Detect column count from header (dates like "Dec. 31, 2025", "December 31, 2024", "12/31/2024")
+  const dateRe = /^(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\.?\s*\d{1,2},\s*\d{4}|(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s*\d{4}|\d{1,2}\/\d{1,2}\/\d{4})$/i
+  const headerStart = cells.findIndex(c => dateRe.test(c))
+  if (headerStart < 0) return null
+  let numYears = 0
+  for (let i = headerStart; i < cells.length && dateRe.test(cells[i]); i++) numYears++
+  if (numYears < 1) return null
+
+  // Skip-set: cells that are line-item labels, not segment names
+  const skipPatterns = [
+    /segment reporting information/i,
+    /line items/i,
+    /total revenues?/i,
+    /total income/i,
+    /total costs/i,
+    /hedging/i,
+    /employee compensation/i,
+    /other costs/i,
+    /operating income/i,
+    /number of/i,
+    /12 months/i,
+    /usd/i,
+    /information about/i,
+    /revenue from contract/i,      // prevent revenue rows from being named segments
+    /revenues?\s*$/i,              // same for plain "revenues" rows
+    /operating segments/i,
+    /reconciling items/i,
+    /\|/,                          // "Operating Segments | Google Services" style entries
+    /^\$/,
+    /^\(?\d/,
+    /^\s*$/,
+    /^(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|January|February|March|April|May|June|July|August|September|October|November|December)[\s.]\s*\d/i,  // date headers
+  ]
+
+  const revenuePatterns = [
+    /revenue from contract/i,
+    /revenues?\s*$/i,
+  ]
+
+  const results: Array<{ name: string; values: number[] }> = []
+  // Track the most recent non-skipped label candidate — used as segment name when
+  // a revenue row follows. This works for any filing layout (not just Google's).
+  let lastLabelCandidate: string | null = null
+
+  for (let i = 0; i < cells.length; i++) {
+    const cell = cells[i]
+
+    // Check if this looks like a segment name candidate
+    const isSkip = skipPatterns.some(p => p.test(cell))
+    if (!isSkip && cell.length > 2 && cell.length < 80) {
+      lastLabelCandidate = cell
+    }
+
+    // Check if this is a revenue row — attribute it to the most recent label candidate
+    const currentSegment = lastLabelCandidate
+    if (currentSegment && revenuePatterns.some(p => p.test(cell))) {
+      const vals: number[] = []
+      for (let j = i + 1; j < cells.length && vals.length < numYears; j++) {
+        const n = parseNumber(cells[j])
+        if (n !== null) {
+          // Values in the report are in millions — keep as-is
+          vals.push(n)
+        } else if (cells[j] && !/^\s*$/.test(cells[j])) {
+          break
+        }
+      }
+      if (vals.length >= 1) {
+        // Avoid duplicate segments
+        if (!results.find(r => r.name === currentSegment)) {
+          results.push({ name: currentSegment, values: vals })
+        }
+        lastLabelCandidate = null // reset after capturing
+      }
+    }
+  }
+
+  return results.length >= 2 ? results : null
+}
+
+async function fetchSegmentsByFilingReport(cikRaw: number): Promise<RevenueSegment[] | null> {
+  try {
+    const cik = String(cikRaw).padStart(10, '0')
+
+    // Get latest 10-K accession
+    const submissions = await fetch(`https://data.sec.gov/submissions/CIK${cik}.json`, {
+      headers: EDGAR_UA, cache: 'no-store',
+    }).then(r => r.ok ? r.json() : null) as { filings?: { recent?: { form?: string[]; accessionNumber?: string[] } } } | null
+    if (!submissions) return null
+
+    const forms = submissions.filings?.recent?.form ?? []
+    const accns = submissions.filings?.recent?.accessionNumber ?? []
+    const idx10k = forms.findIndex(f => f === '10-K')
+    if (idx10k < 0) return null
+    const accn = accns[idx10k].replace(/-/g, '')
+
+    // Fetch FilingSummary.xml to find segment report file
+    const summaryXml = await fetch(
+      `https://www.sec.gov/Archives/edgar/data/${cikRaw}/${accn}/FilingSummary.xml`,
+      { headers: EDGAR_UA, cache: 'no-store' }
+    ).then(r => r.ok ? r.text() : null)
+    if (!summaryXml) return null
+
+    // Find R*.htm file whose ShortName mentions Segments and Revenue
+    const reportMatches = [...summaryXml.matchAll(/<Report[^>]*>([\s\S]*?)<\/Report>/gi)]
+    let segmentFile: string | null = null
+    for (const m of reportMatches) {
+      const block = m[1]
+      const shortName = block.match(/<ShortName>(.*?)<\/ShortName>/i)?.[1] ?? ''
+      const htmlFile  = block.match(/<HtmlFileName>(.*?)<\/HtmlFileName>/i)?.[1] ?? ''
+      if (
+        htmlFile &&
+        /segment/i.test(shortName) &&
+        /(revenue|income|sales|financial\s+information)/i.test(shortName)
+      ) {
+        segmentFile = htmlFile
+        break
+      }
+    }
+    if (!segmentFile) return null
+
+    const reportHtml = await fetch(
+      `https://www.sec.gov/Archives/edgar/data/${cikRaw}/${accn}/${segmentFile}`,
+      { headers: EDGAR_UA, cache: 'no-store' }
+    ).then(r => r.ok ? r.text() : null)
+    if (!reportHtml) return null
+
+    const parsed = parseSegmentReportHtml(reportHtml)
+    if (!parsed) return null
+
+    const total = parsed.reduce((sum, s) => sum + (s.values[0] ?? 0), 0)
+    if (total <= 0) return null
+
+    return parsed.map((s, _, arr) => {
+      const cur = s.values[0]
+      const prev = s.values[1] ?? null
+      const growthYoy = cur != null && prev != null && prev !== 0
+        ? parseFloat(((cur - prev) / Math.abs(prev) * 100).toFixed(1))
+        : null
+      const segTotal = arr.reduce((sum, x) => sum + (x.values[0] ?? 0), 0)
+      return {
+        name: s.name,
+        value: cur,
+        pct: parseFloat((cur / segTotal * 100).toFixed(1)),
+        growthYoy,
+      }
+    }).sort((a, b) => b.value - a.value)
+  } catch {
+    return null
+  }
+}
+
 async function fetchSegments(symbol: string): Promise<RevenueSegment[] | null> {
   try {
     const tickerMap = await fetch('https://www.sec.gov/files/company_tickers.json', {
-      headers: { 'User-Agent': 'Graham-App contact@graham.app' },
-      next: { revalidate: 86400 },
+      headers: EDGAR_UA,
+      cache: 'no-store',
     }).then(r => (r.ok ? r.json() : null))
     if (!tickerMap) return null
 
@@ -126,17 +303,22 @@ async function fetchSegments(symbol: string): Promise<RevenueSegment[] | null> {
       .find(e => e?.ticker?.toUpperCase() === symbol.toUpperCase())
     if (!entry) return null
 
+    // Try the R*.htm filing report approach first (works for companies like Google
+    // that don't use XBRL segment dimensions)
+    const fromReport = await fetchSegmentsByFilingReport(entry.cik_str)
+    if (fromReport && fromReport.length >= 2) return fromReport
+
+    // Fall back to XBRL company facts (works for companies that tag segment dimensions)
     const cik = String(entry.cik_str).padStart(10, '0')
     const facts = await fetch(`https://data.sec.gov/api/xbrl/companyfacts/CIK${cik}.json`, {
-      headers: { 'User-Agent': 'Graham-App contact@graham.app' },
-      next: { revalidate: 86400 },
+      headers: EDGAR_UA,
+      cache: 'no-store', // file can exceed Next.js 2MB cache limit
     }).then(r => (r.ok ? r.json() : null))
     if (!facts) return null
 
     const usGaap = facts?.facts?.['us-gaap'] as Record<string, { units?: Record<string, Array<Record<string, unknown>>> }> | undefined
     if (!usGaap) return null
 
-    // Look for segmented revenue concepts
     const revConcepts = [
       'RevenueFromContractWithCustomerExcludingAssessedTax',
       'RevenueFromContractWithCustomerIncludingAssessedTax',
@@ -148,22 +330,19 @@ async function fetchSegments(symbol: string): Promise<RevenueSegment[] | null> {
       const units = usGaap[c]?.units?.USD
       if (!Array.isArray(units)) continue
 
-      // Find entries with segment dimensions (they have a "segment" or "dim" field)
       const segEntries = units.filter(u =>
         (u.form === '10-K' || u.fp === 'FY') &&
         u.segment != null
       )
       if (segEntries.length < 2) continue
 
-      // Get the most recent fiscal year
       const latestYear = segEntries
         .map(u => yearFromEndDate(u.end) ?? 0)
         .reduce((a, b) => Math.max(a, b), 0)
       if (!latestYear) continue
 
       const currentYearEntries = segEntries.filter(u => yearFromEndDate(u.end) === latestYear)
-      const prevYearEntries = segEntries.filter(u => yearFromEndDate(u.end) === latestYear - 1)
-
+      const prevYearEntries    = segEntries.filter(u => yearFromEndDate(u.end) === latestYear - 1)
       if (currentYearEntries.length < 2) continue
 
       const total = currentYearEntries.reduce((sum, u) => sum + (numOrNull(u.val) ?? 0), 0)
@@ -175,8 +354,6 @@ async function fetchSegments(symbol: string): Promise<RevenueSegment[] | null> {
           const segName = typeof u.segment === 'object' && u.segment != null
             ? (u.segment as Record<string, unknown>).value as string ?? String(u.segment)
             : String(u.segment)
-
-          // Try to find prior year value for this segment
           const prevEntry = prevYearEntries.find(p => {
             const pName = typeof p.segment === 'object' && p.segment != null
               ? (p.segment as Record<string, unknown>).value as string ?? String(p.segment)
@@ -187,7 +364,6 @@ async function fetchSegments(symbol: string): Promise<RevenueSegment[] | null> {
           const growthYoy = prevVal != null && prevVal !== 0
             ? parseFloat(((val - prevVal) / Math.abs(prevVal) * 100).toFixed(1))
             : null
-
           return {
             name: segName,
             value: val,

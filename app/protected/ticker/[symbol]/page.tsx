@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import type { FinancialsApiResponse } from '@/app/api/ticker/[symbol]/financials/route'
 
@@ -1181,59 +1181,6 @@ export default function TickerPage() {
                       </div>
                     </div>
 
-                    {/* Segment breakdown */}
-                    {financials.segments && financials.segments.length >= 2 && (
-                      <div className="card" style={{ padding: '24px 28px' }}>
-                        <div style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 20 }}>Revenue by Segment</div>
-                        <div style={{ display: 'flex', gap: 32, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-                          {/* SVG donut */}
-                          {(() => {
-                            const COLORS = ['var(--gold)', '#7eb8f7', '#7bcfa8', '#e07b7b', '#b07bf7', '#f7c97b', '#7bf7f0']
-                            const r = 56; const cx = 72; const cy = 72; const stroke = 18
-                            let cumPct = 0
-                            const slices = financials.segments!.map((s, i) => {
-                              const start = cumPct / 100 * 2 * Math.PI - Math.PI / 2
-                              cumPct += s.pct
-                              const end = cumPct / 100 * 2 * Math.PI - Math.PI / 2
-                              const x1 = cx + r * Math.cos(start); const y1 = cy + r * Math.sin(start)
-                              const x2 = cx + r * Math.cos(end);   const y2 = cy + r * Math.sin(end)
-                              const large = s.pct > 50 ? 1 : 0
-                              return { d: `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2} Z`, color: COLORS[i % COLORS.length] }
-                            })
-                            return (
-                              <svg width={144} height={144} style={{ flexShrink: 0 }}>
-                                {slices.map((s, i) => <path key={i} d={s.d} fill={s.color} opacity={0.85} />)}
-                                <circle cx={cx} cy={cy} r={r - stroke} fill="var(--bg-surface)" />
-                              </svg>
-                            )
-                          })()}
-                          {/* Legend table */}
-                          <div style={{ flex: 1, minWidth: 220 }}>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '0 20px', fontSize: 12 }}>
-                              <span style={{ color: 'var(--text-muted)', fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.06em', paddingBottom: 8 }}>Segment</span>
-                              <span style={{ color: 'var(--text-muted)', fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.06em', paddingBottom: 8 }}>Share</span>
-                              <span style={{ color: 'var(--text-muted)', fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.06em', paddingBottom: 8 }}>YoY</span>
-                              {financials.segments!.map((s, i) => {
-                                const COLORS = ['var(--gold)', '#7eb8f7', '#7bcfa8', '#e07b7b', '#b07bf7', '#f7c97b', '#7bf7f0']
-                                return (
-                                  <>
-                                    <span key={`n${i}`} style={{ color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8, paddingBottom: 6 }}>
-                                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: COLORS[i % COLORS.length], display: 'inline-block', flexShrink: 0 }} />
-                                      {s.name}
-                                    </span>
-                                    <span key={`p${i}`} style={{ color: 'var(--text-secondary)', paddingBottom: 6 }}>{s.pct.toFixed(1)}%</span>
-                                    <span key={`g${i}`} style={{ color: s.growthYoy == null ? 'var(--text-muted)' : s.growthYoy >= 0 ? 'var(--green)' : 'var(--red)', paddingBottom: 6 }}>
-                                      {s.growthYoy == null ? '—' : `${s.growthYoy >= 0 ? '+' : ''}${s.growthYoy.toFixed(1)}%`}
-                                    </span>
-                                  </>
-                                )
-                              })}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
                     {/* Financial statements */}
                     <div className="card" style={{ padding: '24px 28px' }}>
                       {/* Sub-tab bar */}
@@ -1260,6 +1207,128 @@ export default function TickerPage() {
                           </div>
                         )}
                       </div>
+
+                    {/* ── Income Statement: Margins chart ── */}
+                    {financials.years.length > 0 && stmtTab === 'income' && (() => {
+                      const revRow = financials.annualIncome.find(r => r.concept === 'revenue')
+                      const gpRow  = financials.annualIncome.find(r => r.concept === 'grossProfit')
+                      const oiRow  = financials.annualIncome.find(r => r.concept === 'operatingIncome')
+                      const niRow  = financials.annualIncome.find(r => r.concept === 'netIncome')
+                      const margins = financials.years.map((y, i) => {
+                        const rev = revRow?.values[i] ?? null
+                        const gp  = gpRow?.values[i]  ?? null
+                        const oi  = oiRow?.values[i]  ?? null
+                        const ni  = niRow?.values[i]  ?? null
+                        return {
+                          year: y,
+                          gross:     rev && gp ? parseFloat((gp / rev * 100).toFixed(1)) : null,
+                          operating: rev && oi ? parseFloat((oi / rev * 100).toFixed(1)) : null,
+                          net:       rev && ni ? parseFloat((ni / rev * 100).toFixed(1)) : null,
+                        }
+                      })
+                      const hasAny = margins.some(m => m.gross != null || m.operating != null || m.net != null)
+                      if (!hasAny) return null
+                      const MCOLS = { gross: 'var(--gold)', operating: '#7eb8f7', net: '#7bcfa8' }
+                      const allVals = margins.flatMap(m => [m.gross, m.operating, m.net]).filter((v): v is number => v != null)
+                      const maxVal = Math.max(...allVals, 1)
+                      const minVal = Math.min(...allVals, 0)
+                      const range  = maxVal - minVal || 1
+                      const chartH = 100; const barW = 11; const groupW = 50; const leftPad = 34
+                      return (
+                        <div className="card" style={{ padding: '20px 28px 24px', marginBottom: 24 }}>
+                          <div style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 18 }}>Profit Margins Over Time</div>
+                          <div style={{ display: 'flex', gap: 32, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                            <svg width={leftPad + margins.length * groupW + 10} height={chartH + 28} style={{ flexShrink: 0, overflow: 'visible' }}>
+                              {[0, 25, 50, 75, 100].filter(v => v <= maxVal + 8 && v >= minVal - 5).map(pct => {
+                                const y = chartH - ((pct - minVal) / range * chartH)
+                                return (
+                                  <g key={pct}>
+                                    <line x1={leftPad - 4} y1={y} x2={leftPad + margins.length * groupW} y2={y} stroke="var(--border)" strokeWidth={0.5} strokeDasharray="3,3" />
+                                    <text x={leftPad - 6} y={y + 4} textAnchor="end" fontSize={9} fill="var(--text-muted)">{pct}%</text>
+                                  </g>
+                                )
+                              })}
+                              {margins.map((m, gi) => {
+                                const x0 = leftPad + gi * groupW + (groupW - 3 * barW - 4) / 2
+                                return (
+                                  <g key={m.year}>
+                                    {m.gross != null && (() => { const h = Math.max(2, (m.gross - minVal) / range * chartH); return <rect x={x0} y={chartH - h} width={barW} height={h} fill={MCOLS.gross} rx={2} opacity={0.85} /> })()}
+                                    {m.operating != null && (() => { const h = Math.max(2, (m.operating - minVal) / range * chartH); return <rect x={x0 + barW + 2} y={chartH - h} width={barW} height={h} fill={MCOLS.operating} rx={2} opacity={0.85} /> })()}
+                                    {m.net != null && (() => { const h = Math.max(2, (m.net - minVal) / range * chartH); return <rect x={x0 + (barW + 2) * 2} y={chartH - h} width={barW} height={h} fill={MCOLS.net} rx={2} opacity={0.85} /> })()}
+                                    <text x={leftPad + gi * groupW + groupW / 2} y={chartH + 16} textAnchor="middle" fontSize={10} fill="var(--text-muted)">FY{m.year}</text>
+                                  </g>
+                                )
+                              })}
+                            </svg>
+                            <div>
+                              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 12 }}>Latest year</div>
+                              {([
+                                { label: 'Gross Margin',     val: margins[0]?.gross,     color: MCOLS.gross },
+                                { label: 'Operating Margin', val: margins[0]?.operating, color: MCOLS.operating },
+                                { label: 'Net Margin',       val: margins[0]?.net,       color: MCOLS.net },
+                              ] as { label: string; val: number | null | undefined; color: string }[]).map(({ label, val, color }) => (
+                                <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                                  <span style={{ width: 10, height: 10, borderRadius: 2, background: color, display: 'inline-block', flexShrink: 0 }} />
+                                  <span style={{ fontSize: 12, color: 'var(--text-secondary)', flex: 1, minWidth: 130 }}>{label}</span>
+                                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>
+                                    {val != null ? `${val.toFixed(1)}%` : '—'}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })()}
+
+                    {/* ── Balance Sheet tab: Revenue stream breakdown (SEC EDGAR) ── */}
+                    {stmtTab === 'balance' && (() => {
+                      const segs = financials.segments
+                      if (!segs || segs.length < 2) return (
+                        <div className="card" style={{ padding: '20px 28px 24px', marginBottom: 24, color: 'var(--text-muted)', fontSize: 13 }}>
+                          Revenue segment data unavailable for this company.
+                        </div>
+                      )
+                      const SCOLS = ['var(--gold)', '#7eb8f7', '#7bcfa8', '#e07b7b', '#b07bf7', '#f7c97b', '#7bf7f0']
+                      const r = 56; const cx = 72; const cy = 72; let cumPct = 0
+                      const donut = segs.map((s, i) => {
+                        const start = cumPct / 100 * 2 * Math.PI - Math.PI / 2; cumPct += s.pct
+                        const end   = cumPct / 100 * 2 * Math.PI - Math.PI / 2
+                        const x1 = cx + r * Math.cos(start); const y1 = cy + r * Math.sin(start)
+                        const x2 = cx + r * Math.cos(end);   const y2 = cy + r * Math.sin(end)
+                        return { ...s, color: SCOLS[i % SCOLS.length], d: `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${s.pct > 50 ? 1 : 0} 1 ${x2} ${y2} Z` }
+                      })
+                      return (
+                        <div className="card" style={{ padding: '20px 28px 24px', marginBottom: 24 }}>
+                          <div style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 18 }}>Revenue by Segment (Most Recent Year · SEC EDGAR)</div>
+                          <div style={{ display: 'flex', gap: 32, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                            <svg width={144} height={144} style={{ flexShrink: 0 }}>
+                              {donut.map((s, i) => <path key={i} d={s.d} fill={s.color} opacity={0.85} />)}
+                              <circle cx={cx} cy={cy} r={r - 18} fill="var(--bg-surface)" />
+                            </svg>
+                            <div style={{ flex: 1, minWidth: 220 }}>
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '0 20px', fontSize: 12 }}>
+                                <span style={{ color: 'var(--text-muted)', fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.06em', paddingBottom: 8 }}>Segment</span>
+                                <span style={{ color: 'var(--text-muted)', fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.06em', paddingBottom: 8 }}>Share</span>
+                                <span style={{ color: 'var(--text-muted)', fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.06em', paddingBottom: 8 }}>YoY</span>
+                                {donut.map((s, i) => (
+                                  <React.Fragment key={i}>
+                                    <span style={{ color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8, paddingBottom: 6 }}>
+                                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: s.color, display: 'inline-block', flexShrink: 0 }} />
+                                      {s.name}
+                                    </span>
+                                    <span style={{ color: 'var(--text-secondary)', paddingBottom: 6, fontVariantNumeric: 'tabular-nums' }}>{s.pct.toFixed(1)}%</span>
+                                    <span style={{ paddingBottom: 6, fontVariantNumeric: 'tabular-nums', color: s.growthYoy == null ? 'var(--text-muted)' : s.growthYoy >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                                      {s.growthYoy == null ? '—' : `${s.growthYoy >= 0 ? '+' : ''}${s.growthYoy.toFixed(1)}%`}
+                                    </span>
+                                  </React.Fragment>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })()}
 
                       {/* Statement table */}
                       {financials.years.length === 0 ? (

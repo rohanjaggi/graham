@@ -206,22 +206,22 @@ export default function ResearchSearchPage() {
   }
 
   return (
-    <div className="animate-fade-up d1" style={{ maxWidth: 1120, margin: '4.5vh auto 0', padding: '0 16px 28px' }}>
-      <section className="card" style={{ padding: '22px 0 0', overflow: 'hidden' }}>
-        <div style={{ padding: '0 26px 18px' }}>
+    <div className="animate-fade-up d1" style={{ maxWidth: 1120, margin: '0 auto', padding: '0 0 28px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+        <div>
           <div style={{ fontSize: 11, letterSpacing: '0.14em', color: 'var(--gold-dim)', textTransform: 'uppercase', fontWeight: 600 }}>
             Research
           </div>
-          <h1 className="font-display text-gold-gradient" style={{ margin: '6px 0 0', fontSize: 48, fontWeight: 500, lineHeight: 1.03 }}>
+          <h1 className="font-display text-gold-gradient" style={{ margin: '6px 0 0', fontSize: 42, fontWeight: 500, lineHeight: 1.05 }}>
             Qualitative Analysis
           </h1>
-          <p style={{ margin: '12px 0 0', color: 'var(--text-secondary)', fontSize: 14.5, lineHeight: 1.65, maxWidth: 980 }}>
+          <p style={{ margin: '10px 0 0', color: 'var(--text-secondary)', fontSize: 14, lineHeight: 1.65, maxWidth: 860 }}>
             Describe what you want in plain English, and we will resolve the best stock or ETF match before sending you to QA.
             Use the prompt bar below for idea-driven searches, or the direct search box for ticker and company lookups.
           </p>
         </div>
 
-        <div style={{ padding: '0 22px 18px' }}>
+        <div className="card" style={{ padding: '20px 22px 22px' }}>
           <div
             className="card-elevated"
             style={{
@@ -257,7 +257,7 @@ export default function ResearchSearchPage() {
           </div>
         </div>
 
-        <div style={{ borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)', padding: '18px 22px' }}>
+        <div className="card" style={{ padding: '18px 22px 20px' }}>
           <form onSubmit={handleSearch} style={{ display: 'flex', gap: 10, alignItems: 'stretch' }}>
             <div ref={wrapRef} style={{ flex: 1, position: 'relative' }}>
             <span
@@ -385,19 +385,6 @@ export default function ResearchSearchPage() {
             </p>
           )}
         </div>
-
-        <div style={{ padding: '20px 22px 24px' }}>
-          <div className="card-elevated" style={{ minHeight: 230, display: 'grid', placeItems: 'center' }}>
-            <div style={{ textAlign: 'center', color: 'var(--text-secondary)', maxWidth: 520, padding: '24px 18px' }}>
-              <div style={{ fontSize: 26, lineHeight: 1, marginBottom: 8, color: 'var(--text-muted)' }}>⊕</div>
-              <div style={{ fontSize: 23, fontWeight: 500, marginBottom: 8 }}>No qualitative brief yet</div>
-              <p style={{ color: 'var(--text-muted)', lineHeight: 1.65 }}>
-                Search a ticker such as JPM, GS, or SPY to generate a crisis-focused overview and structured qualitative output.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
     </div>
   )
 }

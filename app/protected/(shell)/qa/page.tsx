@@ -343,7 +343,7 @@ export default function ScreenerPage() {
         {/* Header */}
         <div>
           <div style={{ fontSize: 10.5, color: 'var(--gold)', letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 10 }}>Screener</div>
-          <h1 className="font-display" style={{ fontSize: 32, fontWeight: 500, letterSpacing: '-0.02em', marginBottom: 8 }}>Stock Screener</h1>
+          <h1 className="font-display text-gold-gradient" style={{ fontSize: 42, fontWeight: 500, lineHeight: 1.05, marginBottom: 8 }}>Stock Screener</h1>
           <p style={{ fontSize: 13.5, color: 'var(--text-muted)', lineHeight: 1.65, maxWidth: 860 }}>
             Warren Buffett–style quality filters across US-listed equities.
           </p>

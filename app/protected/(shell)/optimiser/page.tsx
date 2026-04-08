@@ -457,7 +457,7 @@ export default function OptimiserPage() {
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16 }}>
         <div>
           <div style={{ fontSize: 10.5, color: 'var(--gold)', letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 10 }}>Portfolio</div>
-          <h1 className="font-display" style={{ fontSize: 32, fontWeight: 500, letterSpacing: '-0.02em', marginBottom: 8 }}>Portfolio Allocation Optimiser</h1>
+          <h1 className="font-display text-gold-gradient" style={{ fontSize: 42, fontWeight: 500, lineHeight: 1.05, marginBottom: 8 }}>Portfolio Allocation Optimiser</h1>
           <p style={{ fontSize: 13.5, color: 'var(--text-muted)', lineHeight: 1.65, maxWidth: 880 }}>
             Build a long-term basket, define your investor profile, and generate a disciplined Sharpe-maximizing allocation. Saved portfolios now live in a dedicated library so this page stays focused on creation.
           </p>
