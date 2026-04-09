@@ -25,5 +25,5 @@ export const UNIVERSE: string[] = [
   // Materials
   'LIN','SHW','APD','NEM','FCX',
   // Communication Services
-  'NFLX','DIS','CMCSA','VZ','T','TMUS','META',
+  'NFLX','DIS','CMCSA','VZ','T','TMUS',
 ]

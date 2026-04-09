@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { UNIVERSE } from '@/lib/screener/universe'
+import { createClient } from '@/lib/supabase/server'
 
 export const maxDuration = 60
 
@@ -167,6 +168,12 @@ function passes(f: ScreenerFilters, r: ScreenerRow): boolean {
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
+  const supabase = await createClient()
+  const { data: authData, error: authError } = await supabase.auth.getUser()
+  if (authError || !authData?.user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   let filters: ScreenerFilters = {}
   try { filters = (await req.json()) as ScreenerFilters } catch { /* empty */ }
 
