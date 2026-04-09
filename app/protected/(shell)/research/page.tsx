@@ -206,7 +206,7 @@ export default function ResearchSearchPage() {
   }
 
   return (
-    <div className="animate-fade-up d1" style={{ maxWidth: 1120, margin: '0 auto', padding: '0 0 28px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div className="animate-fade-up d1" style={{ padding: '0 0 28px', display: 'flex', flexDirection: 'column', gap: 20 }}>
 
         <div>
           <div style={{ fontSize: 11, letterSpacing: '0.14em', color: 'var(--gold-dim)', textTransform: 'uppercase', fontWeight: 600 }}>

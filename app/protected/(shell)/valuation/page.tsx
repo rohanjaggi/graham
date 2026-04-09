@@ -3,6 +3,7 @@
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { DCFTab } from './dcf-tab'
+import { SnapshotsTab } from './snapshots-tab'
 
 /* ─── TYPES ──────────────────────────────────────────────────────────────── */
 
@@ -775,10 +776,14 @@ function ValuationContent() {
   const searchParams = useSearchParams()
   const [symbol, setSymbol] = useState(searchParams.get('symbol')?.toUpperCase() ?? '')
   const [profile, setProfile] = useState<CompanyProfile | null>(null)
-  const [activeTab, setActiveTab] = useState<'dcf' | 'comparables'>(
-    searchParams.get('tab') === 'comparables' ? 'comparables' : 'dcf'
-  )
-  const [compsKey, setCompsKey] = useState(0) // increment to re-mount comps on symbol change
+  const [activeTab, setActiveTab] = useState<'snapshots' | 'dcf' | 'comparables'>(() => {
+    const t = searchParams.get('tab')
+    if (t === 'dcf') return 'dcf'
+    if (t === 'comparables') return 'comparables'
+    return 'snapshots'
+  })
+  const [compsKey, setCompsKey] = useState(0)
+  const [snapshotRefreshKey, setSnapshotRefreshKey] = useState(0) // increment to re-mount comps on symbol change
 
   useEffect(() => {
     if (!symbol) { setProfile(null); return }
@@ -803,10 +808,11 @@ function ValuationContent() {
     const upper = sym.toUpperCase()
     setSymbol(upper)
     setCompsKey(k => k + 1)
-    router.push(`/protected/valuation?symbol=${upper}&tab=${activeTab}`, { scroll: false })
-  }, [activeTab, router])
+    setActiveTab('snapshots')
+    router.push(`/protected/valuation?symbol=${upper}&tab=snapshots`, { scroll: false })
+  }, [router])
 
-  function switchTab(nextTab: 'dcf' | 'comparables') {
+  function switchTab(nextTab: 'snapshots' | 'dcf' | 'comparables') {
     setActiveTab(nextTab)
     const query = symbol
       ? `/protected/valuation?symbol=${symbol}&tab=${nextTab}`
@@ -879,26 +885,63 @@ function ValuationContent() {
       </div>
 
       {/* Tabs */}
-      <div className="tab-bar" style={{ marginBottom: 28 }}>
-        <button className={`tab${activeTab === 'dcf' ? ' active' : ''}`} onClick={() => switchTab('dcf')}>
-          DCF Valuation
-        </button>
-        <button className={`tab${activeTab === 'comparables' ? ' active' : ''}`} onClick={() => switchTab('comparables')}>
-          Comparables
-        </button>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 28, borderBottom: '1px solid var(--border)', paddingBottom: 0 }}>
+        {([
+          { key: 'snapshots', label: 'Snapshots' },
+          { key: 'dcf',       label: 'Live DCF' },
+          { key: 'comparables', label: 'Comparables' },
+        ] as const).map(({ key, label }) => {
+          const isActive = activeTab === key
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => switchTab(key)}
+              style={{
+                fontSize: 14,
+                fontWeight: isActive ? 600 : 400,
+                color: isActive ? 'var(--gold)' : 'var(--text-muted)',
+                background: 'none',
+                border: 'none',
+                borderBottom: isActive ? '2px solid var(--gold)' : '2px solid transparent',
+                padding: '10px 18px',
+                marginBottom: -1,
+                cursor: 'pointer',
+                fontFamily: "'DM Sans', sans-serif",
+                letterSpacing: isActive ? '-0.01em' : '0',
+                transition: 'color 0.15s, border-color 0.15s',
+                whiteSpace: 'nowrap',
+              }}
+              onMouseEnter={e => { if (!isActive) e.currentTarget.style.color = 'var(--text-secondary)' }}
+              onMouseLeave={e => { if (!isActive) e.currentTarget.style.color = 'var(--text-muted)' }}
+            >
+              {label}
+            </button>
+          )
+        })}
       </div>
 
-      {/* Tab content */}
-      {activeTab === 'dcf' && (
-        symbol ? (
-          <DCFTab symbol={symbol} currentPrice={profile?.price ?? null} />
-        ) : <EmptyState />
-      )}
-
-      {activeTab === 'comparables' && (
-        symbol ? (
-          <ComparablesTab key={`${symbol}-${compsKey}`} symbol={symbol} />
-        ) : <EmptyState />
+      {/* Tab content — all tabs stay mounted to preserve state; hidden via display:none */}
+      {!symbol ? <EmptyState /> : (
+        <>
+          <div style={{ display: activeTab === 'snapshots' ? 'block' : 'none' }}>
+            <SnapshotsTab
+              symbol={symbol}
+              refreshKey={snapshotRefreshKey}
+              onSwitchToDcf={() => switchTab('dcf')}
+            />
+          </div>
+          <div key={symbol} style={{ display: activeTab === 'dcf' ? 'block' : 'none' }}>
+            <DCFTab
+              symbol={symbol}
+              currentPrice={profile?.price ?? null}
+              onSave={() => setSnapshotRefreshKey(k => k + 1)}
+            />
+          </div>
+          <div key={`${symbol}-${compsKey}`} style={{ display: activeTab === 'comparables' ? 'block' : 'none' }}>
+            <ComparablesTab symbol={symbol} />
+          </div>
+        </>
       )}
     </div>
   )

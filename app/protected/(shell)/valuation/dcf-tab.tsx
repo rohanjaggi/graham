@@ -155,7 +155,7 @@ function ResultsPanel({
       </div>
 
       {/* Summary cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
         {[
           { label: 'PV of FCFs', value: fmtM(result.pvProjectedFCFs) },
           { label: 'Terminal Value', value: fmtM(result.terminalValue) },
@@ -250,7 +250,11 @@ function ScenarioComparison({
 
 /* ─── MAIN COMPONENT ─────────────────────────────────────────────────────── */
 
-export function DCFTab({ symbol, currentPrice: priceFromParent }: { symbol: string; currentPrice: number | null }) {
+export function DCFTab({ symbol, currentPrice: priceFromParent, onSave }: {
+  symbol: string
+  currentPrice: number | null
+  onSave?: () => void
+}) {
   const [loading, setLoading] = useState(false)
   const [apiError, setApiError] = useState<string | null>(null)
   const [apiData, setApiData] = useState<DCFApiResponse | null>(null)
@@ -263,6 +267,49 @@ export function DCFTab({ symbol, currentPrice: priceFromParent }: { symbol: stri
   const [scenario, setScenario] = useState<Scenario>('neutral')
   const [growthRates, setGrowthRates] = useState<GrowthRates>({ conservative: 5, neutral: 10, bullish: 15 })
   const [baseFcfInput, setBaseFcfInput] = useState('')
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+
+  async function handleSaveSnapshot() {
+    if (baseFCF == null || validationError) return
+    if (!allResults.conservative || !allResults.neutral || !allResults.bullish) return
+    setSaveStatus('saving')
+    try {
+      const res = await fetch('/api/dcf-snapshots', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          symbol,
+          company_name:              apiData?.name ?? '',
+          base_fcf:                  baseFCF,
+          wacc,
+          years,
+          terminal_growth_rate:      terminalGrowthRate,
+          growth_rate_conservative:  growthRates.conservative,
+          growth_rate_neutral:       growthRates.neutral,
+          growth_rate_bullish:       growthRates.bullish,
+          market_price:              currentPrice ?? null,
+          shares_outstanding:        apiData?.sharesOutstanding ?? 0,
+          net_debt:                  apiData?.netDebt ?? 0,
+          results_json: {
+            conservative: allResults.conservative,
+            neutral:      allResults.neutral,
+            bullish:      allResults.bullish,
+          },
+        }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error((err as { error?: string }).error ?? res.statusText)
+      }
+      setSaveStatus('saved')
+      onSave?.()
+      setTimeout(() => setSaveStatus('idle'), 2500)
+    } catch (e) {
+      console.error('Save snapshot failed', e)
+      setSaveStatus('error')
+      setTimeout(() => setSaveStatus('idle'), 3000)
+    }
+  }
 
   // Fetch API data when symbol changes
   useEffect(() => {
@@ -498,6 +545,30 @@ export function DCFTab({ symbol, currentPrice: priceFromParent }: { symbol: stri
           bullish={allResults.bullish}
           currentPrice={currentPrice}
         />
+        {baseFCF != null && !validationError && (
+          <div>
+            <button
+              type="button"
+              onClick={() => void handleSaveSnapshot()}
+              disabled={saveStatus === 'saving'}
+              style={{
+                fontSize: 13, fontWeight: 600, padding: '10px 22px', borderRadius: 8, border: 'none',
+                cursor: saveStatus === 'saving' ? 'default' : 'pointer',
+                fontFamily: "'DM Sans', sans-serif", transition: 'background 0.2s, color 0.2s',
+                opacity: saveStatus === 'saving' ? 0.7 : 1,
+                color:      saveStatus === 'saved' ? '#3DD68C' : saveStatus === 'error' ? '#F06070' : '#0A0C12',
+                background: saveStatus === 'saved' ? 'rgba(61,214,140,0.2)'
+                          : saveStatus === 'error' ? 'rgba(240,96,112,0.2)'
+                          : 'var(--gold)',
+              }}
+            >
+              {saveStatus === 'saving' ? 'Saving…'
+                : saveStatus === 'saved' ? '✓ Snapshot saved'
+                : saveStatus === 'error' ? 'Save failed — retry'
+                : 'Save Snapshot'}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )
