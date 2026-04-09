@@ -1572,7 +1572,7 @@ export default function TickerPage() {
                   {/* Actions */}
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
                     <a
-                      href={`/protected/valuation?ticker=${symbol}`}
+                      href={`/protected/valuation?symbol=${symbol}&tab=dcf`}
                       style={{ fontSize: 13, color: 'var(--gold)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}
                     >
                       Open in Valuation ↗
