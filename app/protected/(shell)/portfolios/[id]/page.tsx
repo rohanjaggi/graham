@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
+import { formatDownsidePercent, formatPercent, formatSignedPercent, metricColorForValue } from '@/lib/ui/metricFormat'
 
 type StressScenario = { assumed_shock: number; estimated_portfolio_return: number; estimated_drawdown: number }
 type PortfolioDetail = {
@@ -28,11 +29,6 @@ type PortfolioDetail = {
     updatedAt?: string
   }
   positions: { symbol: string; weight: number; sector: string | null }[]
-}
-
-function formatPct(value: number | undefined) {
-  if (value == null || Number.isNaN(value)) return '—'
-  return `${(value * 100).toFixed(2)}%`
 }
 
 function formatDate(value?: string) {
@@ -138,7 +134,7 @@ export default function PortfolioDetailPage({ params }: { params: Promise<{ id: 
   const stressEntries = Object.entries(detail?.portfolio.stressTestResults ?? {})
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 1040, fontFamily: "'DM Sans', sans-serif" }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24, width: '100%', fontFamily: "'DM Sans', sans-serif" }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16 }}>
         <div>
           <div style={{ fontSize: 10.5, color: 'var(--gold)', letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 10 }}>Portfolio</div>
@@ -162,23 +158,23 @@ export default function PortfolioDetailPage({ params }: { params: Promise<{ id: 
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 12 }}>
             {[
-              ['Expected return', formatPct(detail.portfolio.expectedAnnualReturn)],
-              ['Expected vol', formatPct(detail.portfolio.expectedAnnualVolatility)],
-              ['Sharpe', detail.portfolio.sharpeRatio.toFixed(3)],
-              ['Max drawdown', formatPct(detail.portfolio.maxDrawdown)],
-              ['Worst month', formatPct(detail.portfolio.worstMonthReturn)],
-              ['Worst quarter', formatPct(detail.portfolio.worstQuarterReturn)],
-              ['Risk-free rate', formatPct(detail.portfolio.riskFreeRateUsed)],
-              ['Lookback', `${detail.portfolio.lookbackPeriodYears}y`],
-            ].map(([label, value]) => (
+              ['Expected return', formatSignedPercent(detail.portfolio.expectedAnnualReturn), metricColorForValue(detail.portfolio.expectedAnnualReturn)],
+              ['Expected vol', formatPercent(detail.portfolio.expectedAnnualVolatility), 'var(--text-primary)'],
+              ['Sharpe', detail.portfolio.sharpeRatio.toFixed(3), 'var(--gold)'],
+              ['Max drawdown', formatDownsidePercent(detail.portfolio.maxDrawdown), 'var(--red)'],
+              ['Worst month', formatDownsidePercent(detail.portfolio.worstMonthReturn), 'var(--red)'],
+              ['Worst quarter', formatDownsidePercent(detail.portfolio.worstQuarterReturn), 'var(--red)'],
+              ['Risk-free rate', formatPercent(detail.portfolio.riskFreeRateUsed), 'var(--text-primary)'],
+              ['Lookback', `${detail.portfolio.lookbackPeriodYears}y`, 'var(--text-primary)'],
+            ].map(([label, value, color]) => (
               <div key={label} className="card" style={{ padding: '16px 18px' }}>
                 <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4 }}>{label}</div>
-                <div style={{ fontSize: 18, fontWeight: 600 }}>{value}</div>
+                <div style={{ fontSize: 18, fontWeight: 600, color: typeof color === 'string' ? color : 'var(--text-primary)' }}>{value}</div>
               </div>
             ))}
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.2fr) minmax(320px, 0.8fr)', gap: 20 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.35fr) minmax(340px, 0.65fr)', gap: 20, alignItems: 'start' }}>
             <div className="card" style={{ padding: '22px 24px' }}>
               <div style={{ fontSize: 10.5, color: 'var(--text-muted)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 16 }}>Holdings</div>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -194,7 +190,7 @@ export default function PortfolioDetailPage({ params }: { params: Promise<{ id: 
                     <tr key={position.symbol} style={{ borderBottom: '1px solid var(--border)' }}>
                       <td style={{ padding: '12px 8px 12px 0', fontWeight: 600, color: 'var(--gold)' }}>{position.symbol}</td>
                       <td style={{ padding: '12px 8px 12px 0', color: 'var(--text-muted)' }}>{position.sector ?? '—'}</td>
-                      <td style={{ textAlign: 'right', padding: '12px 0', fontVariantNumeric: 'tabular-nums' }}>{(position.weight * 100).toFixed(2)}%</td>
+                      <td style={{ textAlign: 'right', padding: '12px 0', fontVariantNumeric: 'tabular-nums' }}>{formatPercent(position.weight)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -254,9 +250,9 @@ export default function PortfolioDetailPage({ params }: { params: Promise<{ id: 
                 {stressEntries.map(([name, scenario]) => (
                   <div key={name} style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, 1.2fr) repeat(3, minmax(120px, 1fr))', gap: 12, padding: '12px 14px', borderRadius: 10, background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
                     <div style={{ fontSize: 13, fontWeight: 600, textTransform: 'capitalize' }}>{name.replace(/_/g, ' ')}</div>
-                    <div style={{ fontSize: 12.5, color: 'var(--text-secondary)' }}>Shock {formatPct(scenario.assumed_shock)}</div>
-                    <div style={{ fontSize: 12.5, color: 'var(--text-secondary)' }}>Return {formatPct(scenario.estimated_portfolio_return)}</div>
-                    <div style={{ fontSize: 12.5, color: 'var(--text-secondary)' }}>Drawdown {formatPct(scenario.estimated_drawdown)}</div>
+                    <div style={{ fontSize: 12.5, color: metricColorForValue(scenario.assumed_shock) }}>Shock {formatSignedPercent(scenario.assumed_shock)}</div>
+                    <div style={{ fontSize: 12.5, color: metricColorForValue(scenario.estimated_portfolio_return) }}>Return {formatSignedPercent(scenario.estimated_portfolio_return)}</div>
+                    <div style={{ fontSize: 12.5, color: 'var(--red)' }}>Drawdown {formatDownsidePercent(scenario.estimated_drawdown)}</div>
                   </div>
                 ))}
               </div>

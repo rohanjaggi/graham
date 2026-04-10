@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
+import { fetchMergedCompanySnapshot } from '@/lib/market/companySnapshot'
 
 export async function GET(
   _request: NextRequest,
@@ -16,44 +17,42 @@ export async function GET(
   const toStr = today.toISOString().split('T')[0]
   const fromStr = from.toISOString().split('T')[0]
 
-  const [profileRes, quoteRes, metricsRes, newsRes] = await Promise.allSettled([
-    fetch(`${base}/stock/profile2?symbol=${sym}&token=${key}`, { next: { revalidate: 3600 } }).then(r => r.json()),
-    fetch(`${base}/quote?symbol=${sym}&token=${key}`, { next: { revalidate: 30 } }).then(r => r.json()),
-    fetch(`${base}/stock/metric?symbol=${sym}&metric=all&token=${key}`, { next: { revalidate: 3600 } }).then(r => r.json()),
-    fetch(`${base}/company-news?symbol=${sym}&from=${fromStr}&to=${toStr}&token=${key}`, { next: { revalidate: 900 } }).then(r => r.json()),
+  const [snapshot, news] = await Promise.all([
+    fetchMergedCompanySnapshot(sym, key),
+    fetch(`${base}/company-news?symbol=${sym}&from=${fromStr}&to=${toStr}&token=${key}`, { next: { revalidate: 900 } })
+      .then((response) => (response.ok ? response.json() : []))
+      .then((payload) => (Array.isArray(payload) ? payload.slice(0, 5) : []))
+      .catch(() => []),
   ])
 
-  const profile = profileRes.status === 'fulfilled' ? profileRes.value : {}
-  const quote   = quoteRes.status   === 'fulfilled' ? quoteRes.value   : {}
-  const metrics = metricsRes.status === 'fulfilled' ? metricsRes.value?.metric ?? {} : {}
-  const news    = newsRes.status    === 'fulfilled' && Array.isArray(newsRes.value)
-    ? newsRes.value.slice(0, 5)
-    : []
-
-  if (!profile?.name) {
+  if (!snapshot) {
     return NextResponse.json({ error: 'Ticker not found' }, { status: 404 })
   }
 
+  const metrics = snapshot.metrics
+
   return NextResponse.json({
     symbol: sym,
-    name: profile.name ?? sym,
-    exchange: profile.exchange ?? '—',
-    sector: profile.finnhubIndustry ?? '—',
-    country: profile.country ?? '—',
-    website: profile.weburl ?? null,
-    logo: profile.logo ?? null,
-    marketCap: profile.marketCapitalization ?? null, // in millions
-    description: null, // Finnhub free tier doesn't include description
+    name: snapshot.name,
+    exchange: snapshot.exchange ?? '—',
+    sector: snapshot.sector ?? '—',
+    country: snapshot.country ?? '—',
+    website: snapshot.website,
+    logo: snapshot.logo,
+    marketCap: snapshot.marketCap,
+    description: null,
 
-    price: quote.c ?? null,
-    priceChange: quote.d ?? null,
-    priceChangePct: quote.dp ?? null,
-    dayHigh: quote.h ?? null,
-    dayLow: quote.l ?? null,
-    open: quote.o ?? null,
-    prevClose: quote.pc ?? null,
+    price: snapshot.price,
+    priceChange: snapshot.priceChange,
+    priceChangePct: snapshot.priceChangePct,
+    dayHigh: snapshot.dayHigh,
+    dayLow: snapshot.dayLow,
+    open: snapshot.open,
+    prevClose: snapshot.prevClose,
 
-    pe: metrics['peNormalizedAnnual'] ?? metrics['peTTM'] ?? null,
+    pe: metrics['peNormalizedAnnual'] ?? metrics['peTTM'] ?? metrics['peBasicExclExtraTTM'] ?? null,
+    peNormalized: metrics['peNormalizedAnnual'] ?? null,
+    peTtm: metrics['peTTM'] ?? metrics['peBasicExclExtraTTM'] ?? null,
     pb: metrics['pbAnnual'] ?? metrics['pbQuarterly'] ?? null,
     evEbitda: metrics['evEbitdaTTM'] ?? null,
     roe: metrics['roeTTM'] ?? null,
@@ -65,5 +64,6 @@ export async function GET(
     week52Low: metrics['52WeekLow'] ?? null,
 
     news,
+    dataWarnings: snapshot.dataWarnings,
   })
 }

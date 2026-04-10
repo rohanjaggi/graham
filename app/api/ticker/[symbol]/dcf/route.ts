@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
 import { createClient } from '@/lib/supabase/server'
+import { resolveCompanyCik } from '@/lib/sec/edgar'
 
 function getOpenAIClient() {
   return new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
@@ -27,17 +28,9 @@ interface DCFApiResponse {
 
 async function fetchSecBaseFcfMillions(symbol: string): Promise<number | null> {
   try {
-    const tickerMap = await fetch('https://www.sec.gov/files/company_tickers.json', {
-      headers: { 'User-Agent': 'Graham-App contact@graham.app' },
-      next: { revalidate: 86400 },
-    }).then(r => (r.ok ? r.json() : null))
-    if (!tickerMap || typeof tickerMap !== 'object') return null
+    const cik = await resolveCompanyCik(symbol)
+    if (!cik) return null
 
-    const entry = Object.values(tickerMap as Record<string, { cik_str: number; ticker: string }>)
-      .find(e => e?.ticker?.toUpperCase() === symbol.toUpperCase())
-    if (!entry) return null
-
-    const cik = String(entry.cik_str).padStart(10, '0')
     const facts = await fetch(`https://data.sec.gov/api/xbrl/companyfacts/CIK${cik}.json`, {
       headers: { 'User-Agent': 'Graham-App contact@graham.app' },
       next: { revalidate: 86400 },

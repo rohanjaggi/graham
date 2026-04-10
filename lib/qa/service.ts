@@ -1,6 +1,7 @@
 import OpenAI from 'openai'
 import type { QaResponse, RiskLevel } from './contracts'
 import { qaResponseSchema } from './contracts'
+import { fetchLatestAnnualFilingExcerpt } from '@/lib/sec/edgar'
 
 const QA_CACHE_TTL_MS = 15 * 60 * 1000
 const QA_CACHE_TTL_SECONDS = Math.floor(QA_CACHE_TTL_MS / 1000)
@@ -353,55 +354,13 @@ function extractJsonObject(raw: string): unknown {
   }
 }
 
-async function fetchSecExcerpt(symbol: string): Promise<string | null> {
-  try {
-    const tickerMap = await fetch('https://www.sec.gov/files/company_tickers.json', {
-      headers: { 'User-Agent': 'Graham-App contact@graham.app' },
-      next: { revalidate: 86400 },
-    }).then((response) => response.json())
-
-    const entry = Object.values(tickerMap as Record<string, { cik_str: number; ticker: string; title: string }>).find(
-      (item) => item.ticker.toUpperCase() === symbol.toUpperCase()
-    )
-
-    if (!entry) return null
-
-    const cik = String(entry.cik_str).padStart(10, '0')
-    const submissions = await fetch(`https://data.sec.gov/submissions/CIK${cik}.json`, {
-      headers: { 'User-Agent': 'Graham-App contact@graham.app' },
-      next: { revalidate: 86400 },
-    }).then((response) => response.json())
-
-    const filings = submissions.filings?.recent
-    if (!filings) return null
-
-    const index = filings.form?.findIndex((form: string) => form === '10-K' || form === '20-F')
-    if (index == null || index < 0) return null
-
-    const filingText = await fetch(
-      `https://www.sec.gov/Archives/edgar/data/${entry.cik_str}/${String(filings.accessionNumber[index]).replace(/-/g, '')}/${filings.primaryDocument[index]}`,
-      { headers: { 'User-Agent': 'Graham-App contact@graham.app' }, next: { revalidate: 86400 } }
-    ).then((response) => response.text())
-
-    return filingText
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/&nbsp;/g, ' ')
-      .replace(/&amp;/g, '&')
-      .replace(/\s{2,}/g, ' ')
-      .trim()
-      .slice(0, 4000) || null
-  } catch {
-    return null
-  }
-}
-
 async function loadSourceSnapshot(ticker: string): Promise<SourceSnapshot> {
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) throw new QaServiceError('Missing OPENAI_API_KEY', 500)
 
   const model = process.env.OPENAI_QA_MODEL ?? 'gpt-4.1-mini'
   const openai = new OpenAI({ apiKey })
-  const secExcerpt = await fetchSecExcerpt(ticker)
+  const secExcerpt = await fetchLatestAnnualFilingExcerpt(ticker, 4000)
 
   const researchPrompt = [
     `Research the public-market ticker "${ticker}" using web search.`,

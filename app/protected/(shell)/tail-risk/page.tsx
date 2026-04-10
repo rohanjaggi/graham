@@ -2,6 +2,12 @@
 
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
+import {
+  formatDownsidePercent,
+  formatPercent,
+  formatSignedPercent,
+  metricColorForValue,
+} from '@/lib/ui/metricFormat'
 
 type SavedPortfolioSummary = {
   id: string
@@ -43,13 +49,17 @@ type PortfolioRadarSource = SavedPortfolioSummary & {
 type RadarMetric = {
   label: string
   score: number
+  barPercent: number
   rawLabel: string
+  valueColor: string
+  barFill: string
 }
 
-function formatPct(value: number | undefined) {
-  if (value == null || Number.isNaN(value)) return '-'
-  return `${(value * 100).toFixed(2)}%`
-}
+type TailRiskSortOption =
+  | 'drawdown_desc'
+  | 'stress_desc'
+  | 'sector_desc'
+  | 'vol_desc'
 
 function formatObjective(value: string) {
   return value.replace(/_/g, ' ')
@@ -59,20 +69,30 @@ function formatScenarioName(value: string) {
   return value.replace(/_/g, ' ')
 }
 
+function normalizeLossMetric(value: number | undefined) {
+  if (value == null || Number.isNaN(value)) return 0
+  return -Math.abs(value)
+}
+
 function getRiskLabel(maxDrawdown: number) {
-  if (maxDrawdown <= -0.35) return { label: 'High tail risk', color: 'var(--red)' }
-  if (maxDrawdown <= -0.2) return { label: 'Moderate tail risk', color: 'var(--gold)' }
+  const normalized = normalizeLossMetric(maxDrawdown)
+  if (normalized <= -0.35) return { label: 'High tail risk', color: 'var(--red)' }
+  if (normalized <= -0.2) return { label: 'Moderate tail risk', color: 'var(--gold)' }
   return { label: 'Lower tail risk', color: 'var(--green)' }
 }
 
-function clampRiskScore(value: number) {
-  return Math.max(0.08, Math.min(1, value))
+function normalizeRiskScore(value: number) {
+  return Math.max(0, Math.min(1, value))
+}
+
+function clampRadarScore(value: number) {
+  return Math.max(0.08, normalizeRiskScore(value))
 }
 
 function buildRadarPath(metrics: RadarMetric[], radius: number, center: number) {
   const points = metrics.map((metric, index) => {
     const angle = -Math.PI / 2 + (2 * Math.PI * index) / metrics.length
-    const scaledRadius = radius * clampRiskScore(metric.score)
+    const scaledRadius = radius * clampRadarScore(metric.score)
     const x = center + Math.cos(angle) * scaledRadius
     const y = center + Math.sin(angle) * scaledRadius
     return `${x.toFixed(1)},${y.toFixed(1)}`
@@ -107,7 +127,7 @@ function buildRadarAxes(count: number, radius: number, center: number) {
 function getWorstStressDrawdown(stressResults?: Record<string, StressScenario>) {
   return Math.min(
     0,
-    ...Object.values(stressResults ?? {}).map((scenario) => scenario.estimated_drawdown)
+    ...Object.values(stressResults ?? {}).map((scenario) => normalizeLossMetric(scenario.estimated_drawdown))
   )
 }
 
@@ -121,33 +141,53 @@ function getRiskRadarMetrics(
   return [
     {
       label: 'Max DD',
-      score: clampRiskScore(Math.abs(portfolio?.maxDrawdown ?? 0) / 0.5),
-      rawLabel: formatPct(portfolio?.maxDrawdown),
+      score: normalizeRiskScore(Math.abs(normalizeLossMetric(portfolio?.maxDrawdown)) / 0.5),
+      barPercent: Math.max(0, Math.min(100, Math.abs(normalizeLossMetric(portfolio?.maxDrawdown) * 100))),
+      rawLabel: formatDownsidePercent(normalizeLossMetric(portfolio?.maxDrawdown)),
+      valueColor: 'var(--red)',
+      barFill: 'linear-gradient(90deg, var(--red), #ff9478)',
     },
     {
       label: 'Worst Month',
-      score: clampRiskScore(Math.abs(portfolio?.worstMonthReturn ?? 0) / 0.25),
-      rawLabel: formatPct(portfolio?.worstMonthReturn),
+      score: normalizeRiskScore(Math.abs(normalizeLossMetric(portfolio?.worstMonthReturn)) / 0.25),
+      barPercent: Math.max(0, Math.min(100, Math.abs(normalizeLossMetric(portfolio?.worstMonthReturn) * 100))),
+      rawLabel: formatDownsidePercent(normalizeLossMetric(portfolio?.worstMonthReturn)),
+      valueColor: 'var(--red)',
+      barFill: 'linear-gradient(90deg, var(--red), #ff9478)',
     },
     {
       label: 'Worst Quarter',
-      score: clampRiskScore(Math.abs(portfolio?.worstQuarterReturn ?? 0) / 0.35),
-      rawLabel: formatPct(portfolio?.worstQuarterReturn),
+      score: normalizeRiskScore(Math.abs(normalizeLossMetric(portfolio?.worstQuarterReturn)) / 0.35),
+      barPercent: Math.max(0, Math.min(100, Math.abs(normalizeLossMetric(portfolio?.worstQuarterReturn) * 100))),
+      rawLabel: formatDownsidePercent(normalizeLossMetric(portfolio?.worstQuarterReturn)),
+      valueColor: 'var(--red)',
+      barFill: 'linear-gradient(90deg, var(--red), #ff9478)',
     },
     {
       label: 'Volatility',
-      score: clampRiskScore((portfolio?.expectedAnnualVolatility ?? 0) / 0.45),
-      rawLabel: formatPct(portfolio?.expectedAnnualVolatility),
+      score: normalizeRiskScore((portfolio?.expectedAnnualVolatility ?? 0) / 0.45),
+      barPercent: Math.max(0, Math.min(100, (portfolio?.expectedAnnualVolatility ?? 0) * 100)),
+      rawLabel: formatPercent(portfolio?.expectedAnnualVolatility),
+      valueColor: (portfolio?.expectedAnnualVolatility ?? 0) > 0.3 ? 'var(--gold)' : 'var(--text-primary)',
+      barFill: 'linear-gradient(90deg, var(--gold), var(--gold-bright))',
     },
     {
-      label: 'Sector Peak',
-      score: clampRiskScore(concentration / 0.6),
-      rawLabel: formatPct(concentration),
+      label: 'Sector Concentration',
+      score: normalizeRiskScore(concentration / 0.6),
+      barPercent: Math.max(0, Math.min(100, concentration * 100)),
+      rawLabel: `${formatPercent(concentration)} · higher is riskier`,
+      valueColor: concentration > 0.4 ? 'var(--red)' : 'var(--gold)',
+      barFill: concentration > 0.4
+        ? 'linear-gradient(90deg, var(--red), #ff9478)'
+        : 'linear-gradient(90deg, var(--gold), var(--gold-bright))',
     },
     {
       label: 'Stress DD',
-      score: clampRiskScore(Math.abs(stressDrawdown) / 0.6),
-      rawLabel: formatPct(stressDrawdown),
+      score: normalizeRiskScore(Math.abs(stressDrawdown) / 0.6),
+      barPercent: Math.max(0, Math.min(100, Math.abs(stressDrawdown * 100))),
+      rawLabel: formatDownsidePercent(stressDrawdown),
+      valueColor: 'var(--red)',
+      barFill: 'linear-gradient(90deg, var(--red), #ff9478)',
     },
   ]
 }
@@ -240,16 +280,14 @@ function RiskRadarCard({ metrics }: { metrics: RadarMetric[] }) {
           <div key={metric.label}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: 'var(--text-secondary)', marginBottom: 6 }}>
               <span>{metric.label}</span>
-              <span style={{ color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>{metric.rawLabel}</span>
+              <span style={{ color: metric.valueColor, fontVariantNumeric: 'tabular-nums' }}>{metric.rawLabel}</span>
             </div>
             <div style={{ width: '100%', height: 8, borderRadius: 999, background: 'var(--bg-elevated)', border: '1px solid var(--border)', overflow: 'hidden' }}>
               <div
                 style={{
-                  width: `${Math.round(clampRiskScore(metric.score) * 100)}%`,
+                  width: `${metric.barPercent}%`,
                   height: '100%',
-                  background: metric.score > 0.7
-                    ? 'linear-gradient(90deg, var(--red), #ff9478)'
-                    : 'linear-gradient(90deg, var(--gold), var(--gold-bright))',
+                  background: metric.barFill,
                 }}
               />
             </div>
@@ -267,6 +305,7 @@ export default function TailRiskPage() {
   const [listLoading, setListLoading] = useState(true)
   const [detailLoading, setDetailLoading] = useState(false)
   const [error, setError] = useState('')
+  const [sortBy, setSortBy] = useState<TailRiskSortOption>('drawdown_desc')
 
   useEffect(() => {
     void loadPortfolios()
@@ -281,9 +320,11 @@ export default function TailRiskPage() {
     void loadPortfolioDetail(selectedId)
   }, [selectedId])
 
-  const rankedPortfolios = useMemo(() => {
-    return [...portfolios].sort((a, b) => a.maxDrawdown - b.maxDrawdown)
-  }, [portfolios])
+  const detailByPortfolioId = useMemo(() => {
+    const map = new Map<string, PortfolioDetail>()
+    if (detail?.portfolio?.id) map.set(detail.portfolio.id, detail)
+    return map
+  }, [detail])
 
   const sectorExposures = useMemo(() => {
     const aggregate = new Map<string, number>()
@@ -339,6 +380,38 @@ export default function TailRiskPage() {
     }
   }
 
+  const rankedPortfolios = useMemo(() => {
+    const getCachedWorstStress = (portfolioId: string) => {
+      const cached = detailByPortfolioId.get(portfolioId)
+      return Math.abs(getWorstStressDrawdown(cached?.portfolio.stressTestResults))
+    }
+
+    const getCachedSectorPeak = (portfolioId: string) => {
+      const cached = detailByPortfolioId.get(portfolioId)
+      if (!cached) return 0
+      const aggregate = new Map<string, number>()
+      for (const position of cached.positions) {
+        const sector = position.sector || 'Unknown'
+        aggregate.set(sector, (aggregate.get(sector) ?? 0) + position.weight)
+      }
+      return Math.max(0, ...aggregate.values())
+    }
+
+    return [...portfolios].sort((a, b) => {
+      switch (sortBy) {
+        case 'stress_desc':
+          return getCachedWorstStress(b.id) - getCachedWorstStress(a.id)
+        case 'sector_desc':
+          return getCachedSectorPeak(b.id) - getCachedSectorPeak(a.id)
+        case 'vol_desc':
+          return b.expectedAnnualVolatility - a.expectedAnnualVolatility
+        case 'drawdown_desc':
+        default:
+          return Math.abs(normalizeLossMetric(b.maxDrawdown)) - Math.abs(normalizeLossMetric(a.maxDrawdown))
+      }
+    })
+  }, [detailByPortfolioId, portfolios, sortBy])
+
   const selectedPortfolio = detail?.portfolio ?? rankedPortfolios.find((portfolio) => portfolio.id === selectedId)
   const stressEntries = Object.entries(detail?.portfolio.stressTestResults ?? {})
   const drawdownLabel = getRiskLabel(selectedPortfolio?.maxDrawdown ?? 0)
@@ -348,7 +421,7 @@ export default function TailRiskPage() {
   )
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 1180, fontFamily: "'DM Sans', sans-serif" }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24, width: '100%', fontFamily: "'DM Sans', sans-serif" }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16 }}>
         <div>
           <div style={{ fontSize: 10.5, color: 'var(--gold)', letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 10 }}>
@@ -361,9 +434,25 @@ export default function TailRiskPage() {
             Compare saved portfolios by downside metrics, inspect stress scenarios, and review sector concentration for the selected allocation.
           </p>
         </div>
-        <Link href="/protected/optimiser" className="btn-gold" style={{ padding: '12px 18px', textDecoration: 'none' }}>
-          Create portfolio
-        </Link>
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+          <label style={{ display: 'grid', gap: 6 }}>
+            <span style={{ fontSize: 10.5, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Sort by</span>
+            <select
+              className="input-dark"
+              value={sortBy}
+              onChange={(event) => setSortBy(event.target.value as TailRiskSortOption)}
+              style={{ minWidth: 220, paddingRight: 36 }}
+            >
+              <option value="drawdown_desc">Worst max drawdown</option>
+              <option value="stress_desc">Worst stress drawdown</option>
+              <option value="sector_desc">Highest sector concentration</option>
+              <option value="vol_desc">Highest volatility</option>
+            </select>
+          </label>
+          <Link href="/protected/optimiser" className="btn-gold" style={{ padding: '12px 18px', textDecoration: 'none' }}>
+            Create portfolio
+          </Link>
+        </div>
       </div>
 
       {error && (
@@ -417,7 +506,7 @@ export default function TailRiskPage() {
                         {portfolio.name}
                       </div>
                       <div style={{ fontSize: 12, color: risk.color, whiteSpace: 'nowrap' }}>
-                        {formatPct(portfolio.maxDrawdown)}
+                        {formatDownsidePercent(normalizeLossMetric(portfolio.maxDrawdown))}
                       </div>
                     </div>
                     <div style={{ marginTop: 6, fontSize: 11.5, color: 'var(--text-muted)' }}>
@@ -456,11 +545,11 @@ export default function TailRiskPage() {
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginTop: 18 }}>
                 {[
-                  ['Max drawdown', formatPct(selectedPortfolio?.maxDrawdown), drawdownLabel.color],
-                  ['Worst month', formatPct(selectedPortfolio?.worstMonthReturn), 'var(--red)'],
-                  ['Worst quarter', formatPct(selectedPortfolio?.worstQuarterReturn), 'var(--red)'],
-                  ['Expected vol', formatPct(selectedPortfolio?.expectedAnnualVolatility), 'var(--text-primary)'],
-                  ['Expected return', formatPct(selectedPortfolio?.expectedAnnualReturn), 'var(--green)'],
+                  ['Max drawdown', formatDownsidePercent(normalizeLossMetric(selectedPortfolio?.maxDrawdown)), 'var(--red)'],
+                  ['Worst month', formatDownsidePercent(normalizeLossMetric(selectedPortfolio?.worstMonthReturn)), 'var(--red)'],
+                  ['Worst quarter', formatDownsidePercent(normalizeLossMetric(selectedPortfolio?.worstQuarterReturn)), 'var(--red)'],
+                  ['Expected vol', formatPercent(selectedPortfolio?.expectedAnnualVolatility), 'var(--text-primary)'],
+                  ['Expected return', formatSignedPercent(selectedPortfolio?.expectedAnnualReturn), metricColorForValue(selectedPortfolio?.expectedAnnualReturn)],
                   ['Sharpe', selectedPortfolio?.sharpeRatio?.toFixed(3) ?? '-', 'var(--gold)'],
                 ].map(([label, value, color]) => (
                   <div
@@ -519,13 +608,13 @@ export default function TailRiskPage() {
                         {formatScenarioName(name)}
                       </div>
                       <div style={{ fontSize: 12.5, color: 'var(--text-secondary)' }}>
-                        Shock {formatPct(scenario.assumed_shock)}
+                        Shock {formatSignedPercent(scenario.assumed_shock)}
                       </div>
-                      <div style={{ fontSize: 12.5, color: 'var(--text-secondary)' }}>
-                        Return {formatPct(scenario.estimated_portfolio_return)}
+                      <div style={{ fontSize: 12.5, color: metricColorForValue(scenario.estimated_portfolio_return) }}>
+                        Return {formatSignedPercent(scenario.estimated_portfolio_return)}
                       </div>
-                      <div style={{ fontSize: 12.5, color: 'var(--text-secondary)' }}>
-                        Drawdown {formatPct(scenario.estimated_drawdown)}
+                      <div style={{ fontSize: 12.5, color: 'var(--red)' }}>
+                        Drawdown {formatDownsidePercent(normalizeLossMetric(scenario.estimated_drawdown))}
                       </div>
                     </div>
                   ))}
@@ -549,7 +638,7 @@ export default function TailRiskPage() {
                     <div key={sector}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: 'var(--text-secondary)', marginBottom: 6 }}>
                         <span>{sector}</span>
-                        <span>{formatPct(weight)}</span>
+                        <span>{formatPercent(weight)}</span>
                       </div>
                       <div style={{ width: '100%', height: 9, borderRadius: 999, background: 'var(--bg-elevated)', border: '1px solid var(--border)', overflow: 'hidden' }}>
                         <div

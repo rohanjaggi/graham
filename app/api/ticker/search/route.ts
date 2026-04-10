@@ -1,29 +1,31 @@
-import OpenAI from 'openai'
+﻿import OpenAI from 'openai'
 import { NextRequest, NextResponse } from 'next/server'
+import { fetchCompanyMapping, type SecMappingCompany } from '@/lib/sec/edgar'
 
 const CURATED_TICKERS = [
-  { symbol: 'AAPL', description: 'Apple Inc. — consumer devices and services platform' },
-  { symbol: 'MSFT', description: 'Microsoft Corp. — enterprise software and cloud platform' },
-  { symbol: 'GOOGL', description: 'Alphabet Inc. Class A — search, ads, and cloud' },
-  { symbol: 'GOOG', description: 'Alphabet Inc. Class C — search, ads, and cloud' },
-  { symbol: 'AMZN', description: 'Amazon.com, Inc. — e-commerce and cloud infrastructure' },
-  { symbol: 'NVDA', description: 'NVIDIA Corp. — accelerated computing and AI chips' },
-  { symbol: 'META', description: 'Meta Platforms, Inc. — social platforms and digital ads' },
-  { symbol: 'TSLA', description: 'Tesla, Inc. — electric vehicles and energy systems' },
-  { symbol: 'JPM', description: 'JPMorgan Chase & Co. — US money-center bank' },
-  { symbol: 'GS', description: 'Goldman Sachs Group, Inc. — investment bank' },
-  { symbol: 'AIG', description: 'American International Group, Inc. — insurer' },
-  { symbol: 'BAC', description: 'Bank of America Corp. — diversified bank' },
-  { symbol: 'C', description: 'Citigroup Inc. — global bank' },
-  { symbol: 'MS', description: 'Morgan Stanley — investment bank and wealth manager' },
-  { symbol: 'BLK', description: 'BlackRock, Inc. — asset manager' },
-  { symbol: 'WFC', description: 'Wells Fargo & Co. — commercial bank' },
-  { symbol: 'XLF', description: 'Financial Select Sector SPDR Fund — financial sector ETF' },
-  { symbol: 'SPY', description: 'SPDR S&P 500 ETF Trust — broad-market ETF' },
+  { symbol: 'AAPL', description: 'Apple Inc. - consumer devices and services platform' },
+  { symbol: 'MSFT', description: 'Microsoft Corp. - enterprise software and cloud platform' },
+  { symbol: 'GOOGL', description: 'Alphabet Inc. Class A - search, ads, and cloud' },
+  { symbol: 'GOOG', description: 'Alphabet Inc. Class C - search, ads, and cloud' },
+  { symbol: 'AMZN', description: 'Amazon.com, Inc. - e-commerce and cloud infrastructure' },
+  { symbol: 'NVDA', description: 'NVIDIA Corp. - accelerated computing and AI chips' },
+  { symbol: 'META', description: 'Meta Platforms, Inc. - social platforms and digital ads' },
+  { symbol: 'TSLA', description: 'Tesla, Inc. - electric vehicles and energy systems' },
+  { symbol: 'JPM', description: 'JPMorgan Chase & Co. - US money-center bank' },
+  { symbol: 'GS', description: 'Goldman Sachs Group, Inc. - investment bank' },
+  { symbol: 'AIG', description: 'American International Group, Inc. - insurer' },
+  { symbol: 'BAC', description: 'Bank of America Corp. - diversified bank' },
+  { symbol: 'C', description: 'Citigroup Inc. - global bank' },
+  { symbol: 'MS', description: 'Morgan Stanley - investment bank and wealth manager' },
+  { symbol: 'BLK', description: 'BlackRock, Inc. - asset manager' },
+  { symbol: 'WFC', description: 'Wells Fargo & Co. - commercial bank' },
+  { symbol: 'XLF', description: 'Financial Select Sector SPDR Fund - financial sector ETF' },
+  { symbol: 'SPY', description: 'SPDR S&P 500 ETF Trust - broad-market ETF' },
 ]
 
 type SearchItem = { symbol: string; description: string }
 type SearchMode = 'autocomplete' | 'intent'
+type EnrichedSearchItem = SearchItem & { sec?: SecMappingCompany | null }
 
 function levenshtein(a: string, b: string): number {
   if (a === b) return 0
@@ -107,6 +109,67 @@ function normalizeSearchItems(items: SearchItem[]): SearchItem[] {
     .filter((item) => item.symbol.length > 0)
 }
 
+function buildSecDescription(item: SearchItem, sec: SecMappingCompany | null): string {
+  if (!sec) return item.description
+
+  const name = typeof sec.name === 'string' && sec.name.trim() ? sec.name.trim() : null
+  const industry = typeof sec.industry === 'string' && sec.industry.trim() ? sec.industry.trim() : null
+  const sector = typeof sec.sector === 'string' && sec.sector.trim() ? sec.sector.trim() : null
+  const exchange = typeof sec.exchange === 'string' && sec.exchange.trim() ? sec.exchange.trim() : null
+
+  const parts = [industry, sector, exchange].filter(Boolean)
+  if (name && parts.length > 0) return `${name} - ${parts.join(' | ')}`
+  if (name) return name
+  if (parts.length > 0) return `${item.description} - ${parts.join(' | ')}`
+  return item.description
+}
+
+function scoreSecIntentMatch(query: string, sec: SecMappingCompany | null): number {
+  if (!sec) return 0
+
+  const haystack = [
+    sec.name,
+    sec.ticker,
+    sec.sector,
+    sec.industry,
+    sec.sicSector,
+    sec.location,
+    sec.exchange,
+  ]
+    .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+    .join(' ')
+    .toUpperCase()
+
+  if (!haystack) return 0
+
+  const tokens = query.trim().toUpperCase().split(/\s+/).filter(Boolean)
+  let score = 0
+  for (const token of tokens) {
+    if (haystack.includes(token)) score += 10
+  }
+
+  const normalizedQuery = query.trim().toUpperCase()
+  if (normalizedQuery && haystack.includes(normalizedQuery)) score += 18
+  return score
+}
+
+async function enrichWithSecMetadata(items: SearchItem[]): Promise<EnrichedSearchItem[]> {
+  const unique = items.filter((item, index, arr) => arr.findIndex((other) => other.symbol === item.symbol) === index)
+
+  const enriched = await Promise.all(
+    unique.map(async (item) => {
+      const sec = await fetchCompanyMapping(item.symbol).catch(() => null)
+      return {
+        symbol: item.symbol,
+        description: buildSecDescription(item, sec),
+        sec,
+      }
+    })
+  )
+
+  return enriched
+}
+
 async function fetchYahooMatches(query: string): Promise<SearchItem[]> {
   try {
     const response = await fetch(`https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=12&newsCount=0`, {
@@ -128,7 +191,7 @@ async function fetchYahooMatches(query: string): Promise<SearchItem[]> {
       .map((quote) => {
         const symbol = quote.symbol!.toUpperCase().trim()
         const name = quote.shortname || quote.longname || 'Publicly listed security'
-        const exchange = quote.exchDisp ? ` — ${quote.exchDisp}` : ''
+        const exchange = quote.exchDisp ? ` - ${quote.exchDisp}` : ''
         return { symbol, description: `${name}${exchange}` }
       })
   } catch {
@@ -169,8 +232,8 @@ async function fetchAiMatches(query: string, mode: SearchMode, apiKey: string): 
       ? 'Act like a finance research discovery engine. Return a JSON array only. Each item must have `symbol` and `description`, ranked best first for public stocks or ETFs relevant to the user intent.'
       : 'Act like a Google-style finance autocomplete. Return a JSON array only. Each item must have `symbol` and `description`, ranked best match first for a listed stock or ETF relevant to the user query.',
     input: mode === 'intent'
-      ? `User research prompt: "${query}". Return up to 10 public stocks or ETFs that are relevant to this idea or theme. Prefer liquid, recognizable securities. Keep descriptions short, concrete, and beginner-friendly.`
-      : `User search: "${query}". Find up to 8 likely public-market ticker matches. Support plain-English searches like "largest US bank", "JPMorgan", or "financial sector ETF". Keep descriptions short and beginner-friendly, and rank the most likely ticker first.`,
+      ? `User research prompt: "${query}". Return 10 public stocks or ETFs when possible that are relevant to this idea or theme. Prefer liquid, recognizable securities. Keep descriptions short, concrete, and beginner-friendly.`
+      : `User search: "${query}". Find up to 10 likely public-market ticker matches. Support plain-English searches like "largest US bank", "JPMorgan", or "financial sector ETF". Keep descriptions short and beginner-friendly, and rank the most likely ticker first.`,
     temperature: 0,
     tools: [{ type: 'web_search_preview', search_context_size: 'low' }],
   } as never)
@@ -203,7 +266,16 @@ export async function GET(request: NextRequest) {
     if (mode === 'intent') {
       const aiMatches = await fetchAiMatches(q, mode, apiKey)
       const merged = mergeAndDedup(aiMatches, yahooMatches, localMatches)
-      return NextResponse.json(merged.slice(0, 10))
+      const enriched = await enrichWithSecMetadata(merged.slice(0, 20))
+      const reranked = enriched
+        .map((item) => ({
+          item,
+          score: scoreLocalMatch(q, item) + scoreSecIntentMatch(q, item.sec ?? null),
+        }))
+        .sort((a, b) => b.score - a.score)
+        .map(({ item }) => ({ symbol: item.symbol, description: item.description }))
+
+      return NextResponse.json(reranked.slice(0, 10))
     }
 
     if (rankedWithYahoo.length >= 5) {
@@ -217,3 +289,4 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(rankedWithYahoo.slice(0, mode === 'intent' ? 10 : 12))
   }
 }
+

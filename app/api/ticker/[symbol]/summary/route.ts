@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
 import { createClient } from '@/lib/supabase/server'
 import { toYahooSymbol } from '@/lib/portfolio/yahoo'
+import { fetchMergedCompanySnapshot } from '@/lib/market/companySnapshot'
 
 const SUMMARY_CACHE_TTL_MS = 6 * 60 * 60 * 1000
 
@@ -89,10 +90,8 @@ export async function GET(
   const finnhubKey = process.env.FINNHUB_API_KEY
   if (!finnhubKey) return NextResponse.json({ error: 'Missing FINNHUB_API_KEY' }, { status: 500 })
 
-  const [profile, yahooSummary] = await Promise.all([
-    fetch(`https://finnhub.io/api/v1/stock/profile2?symbol=${sym}&token=${finnhubKey}`, { next: { revalidate: 3600 } })
-      .then(r => r.ok ? r.json() : null)
-      .catch(() => null),
+  const [snapshot, yahooSummary] = await Promise.all([
+    fetchMergedCompanySnapshot(sym, finnhubKey),
     fetch(`https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(toYahooSymbol(sym))}?modules=assetProfile`, {
       headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Graham/1.0)' },
       next: { revalidate: 3600 },
@@ -102,12 +101,12 @@ export async function GET(
       .catch(() => null),
   ])
 
-  if (!profile?.name) {
+  if (!snapshot) {
     return NextResponse.json({ error: 'Ticker not found' }, { status: 404 })
   }
 
-  const name = profile.name as string
-  const sector = (profile.finnhubIndustry as string | undefined) ?? null
+  const name = snapshot.name
+  const sector = snapshot.sector
 
   let analysis = fallbackSummary(name, sym, sector, yahooSummary)
   let source: 'openai' | 'yahoo' | 'fallback' = yahooSummary ? 'yahoo' : 'fallback'

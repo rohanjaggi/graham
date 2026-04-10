@@ -46,7 +46,7 @@ async function fetchCompanyData(sym: string, fKey: string): Promise<CompanyData 
     sector:        profile.finnhubIndustry ?? '—',
     marketCap:     profile.marketCapitalization ?? null,
     price:         quote.c ?? null,
-    pe:            metrics['peNormalizedAnnual'] ?? metrics['peTTM'] ?? null,
+    pe:            metrics['peNormalizedAnnual'] ?? metrics['peTTM'] ?? metrics['peBasicExclExtraTTM'] ?? null,
     pb:            metrics['pbAnnual'] ?? metrics['pbQuarterly'] ?? null,
     evEbitda:      metrics['evEbitdaTTM'] ?? null,
     evRevenue:     metrics['evSalesAnnual'] ?? metrics['evSalesTTM'] ?? metrics['psTTM'] ?? null,

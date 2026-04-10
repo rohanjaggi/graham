@@ -82,7 +82,7 @@ export default function ExplorePage() {
   }, [source])
 
   return (
-    <div className="animate-fade-up d1" style={{ maxWidth: 1120, margin: '4.5vh auto 0', padding: '0 16px 28px' }}>
+    <div className="animate-fade-up d1" style={{ width: '100%', margin: '4.5vh 0 0', padding: '0 4px 28px' }}>
       <section className="card" style={{ padding: '22px 22px 24px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 14, flexWrap: 'wrap' }}>
           <div>

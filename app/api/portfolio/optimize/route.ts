@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { BENCHMARK_ETFS } from '@/lib/portfolio/benchmarks'
 import {
@@ -10,6 +10,13 @@ import {
 } from '@/lib/portfolio/yahoo'
 import { type Objective, metricsForDailyReturns, runOptimize } from '@/lib/portfolio/optimizer'
 import { runProfileOptimize } from '@/lib/portfolio/profileOptimizer'
+import {
+  normalizeHorizonBucket,
+  SIMPLE_MODE_PRESETS,
+  type HorizonBucket,
+  type RiskTolerance,
+  type UniverseFilter,
+} from '@/lib/portfolio/simpleMode'
 import { validateUniverseMembership } from '@/lib/portfolio/universe'
 
 const OBJECTIVES: Objective[] = [
@@ -21,13 +28,6 @@ const OBJECTIVES: Objective[] = [
 ]
 
 const SYMBOL_PATTERN = /^[A-Z0-9.\-]+$/
-
-function normalizeHorizonBucket(value: unknown): '<3y' | '3-7y' | '>7y' | null {
-  if (typeof value !== 'string') return null
-  const normalized = value.replace(/â€“|–/g, '-').trim()
-  if (normalized === '<3y' || normalized === '3-7y' || normalized === '>7y') return normalized
-  return null
-}
 
 const HardConstraintsSchema = z.object({
   max_single_position: z.number().min(0).max(0.3).optional(),
@@ -44,10 +44,12 @@ const LegacyOptimizeBodySchema = z.object({
 
 const ProfileOptimizeBodySchema = z.object({
   asset_tickers: z.array(z.string().min(1)).min(3).max(15),
-  lookback_period_years: z.number().int().min(1).max(5).default(5),
-  investment_horizon_bucket: z.string(),
+  objective: z.enum(OBJECTIVES).optional(),
+  simple_mode: z.boolean().optional(),
+  lookback_period_years: z.number().int().min(1).max(5).optional(),
+  investment_horizon_bucket: z.string().optional(),
   risk_tolerance: z.enum(['DEFENSIVE', 'CONSERVATIVE', 'MODERATE', 'AGGRESSIVE']),
-  universe_filter: z.enum(['US_LARGE_CAP', 'US_ALL_CAP']),
+  universe_filter: z.enum(['US_LARGE_CAP', 'US_ALL_CAP']).optional(),
   hard_constraints: HardConstraintsSchema,
   risk_free_rate: z.number().min(0).max(0.2).optional(),
 })
@@ -135,6 +137,22 @@ async function fetchSectorBySymbol(symbols: string[], apiKey: string): Promise<R
   return Object.fromEntries(sectorEntries)
 }
 
+function buildBenchmarkComparisons(
+  aligned: { R: number[][]; symbols: string[] },
+  rfAnnual: number
+) {
+  return BENCHMARK_ETFS.map(({ symbol, name }) => {
+    const columnIndex = aligned.symbols.indexOf(symbol)
+    if (columnIndex < 0) return null
+    const returns = aligned.R.map((row) => row[columnIndex])
+    return {
+      symbol,
+      name,
+      metrics: metricsForDailyReturns(returns, rfAnnual),
+    }
+  }).filter((entry): entry is NonNullable<typeof entry> => entry != null)
+}
+
 async function handleLegacyOptimize(body: z.infer<typeof LegacyOptimizeBodySchema>) {
   const symbols = normalizeSymbols(body.symbols)
   if (symbols.length < 2) {
@@ -167,16 +185,7 @@ async function handleLegacyOptimize(body: z.infer<typeof LegacyOptimizeBodySchem
     return NextResponse.json({ error: 'Optimisation failed.' }, { status: 500 })
   }
 
-  const benchmarkComparisons = BENCHMARK_ETFS.map(({ symbol, name }) => {
-    const columnIndex = aligned.symbols.indexOf(symbol)
-    if (columnIndex < 0) return null
-    const returns = aligned.R.map((row) => row[columnIndex])
-    return {
-      symbol,
-      name,
-      metrics: metricsForDailyReturns(returns, rfAnnual),
-    }
-  }).filter((entry): entry is NonNullable<typeof entry> => entry != null)
+  const benchmarkComparisons = buildBenchmarkComparisons(aligned, rfAnnual)
 
   return NextResponse.json({
     ...result,
@@ -189,7 +198,9 @@ async function handleLegacyOptimize(body: z.infer<typeof LegacyOptimizeBodySchem
 }
 
 async function handleProfileOptimize(body: z.infer<typeof ProfileOptimizeBodySchema>) {
-  const investmentHorizonBucket = normalizeHorizonBucket(body.investment_horizon_bucket)
+  const simpleMode = body.simple_mode === true
+  const preset = SIMPLE_MODE_PRESETS[body.risk_tolerance]
+  const investmentHorizonBucket = normalizeHorizonBucket(body.investment_horizon_bucket ?? preset.investment_horizon_bucket)
   if (!investmentHorizonBucket) {
     return NextResponse.json({ error: 'Invalid investment_horizon_bucket.' }, { status: 400 })
   }
@@ -199,7 +210,8 @@ async function handleProfileOptimize(body: z.infer<typeof ProfileOptimizeBodySch
     return NextResponse.json({ error: 'Provide at least three valid unique tickers.' }, { status: 400 })
   }
 
-  const universeCheck = await validateUniverseMembership(symbols, body.universe_filter)
+  const universeFilter = body.universe_filter ?? preset.universe_filter
+  const universeCheck = await validateUniverseMembership(symbols, universeFilter)
   if (!universeCheck.ok) {
     return NextResponse.json(
       {
@@ -210,8 +222,8 @@ async function handleProfileOptimize(body: z.infer<typeof ProfileOptimizeBodySch
     )
   }
 
-  const years = clampLookbackYears(body.lookback_period_years)
-  const rfAnnual = body.risk_free_rate ?? 0.02
+  const years = clampLookbackYears(body.lookback_period_years ?? preset.lookback_period_years)
+  const rfAnnual = body.risk_free_rate ?? preset.risk_free_rate
   const dataWarnings: string[] = []
   const finnhubApiKey = process.env.FINNHUB_API_KEY
 
@@ -219,16 +231,25 @@ async function handleProfileOptimize(body: z.infer<typeof ProfileOptimizeBodySch
     return NextResponse.json({ error: 'FINNHUB_API_KEY is required for sector-cap validation.' }, { status: 500 })
   }
 
-  const matrixResult = await fetchAlignedMatrix(symbols, years, false)
+  if (simpleMode) {
+    dataWarnings.push(
+      `Simple mode defaults applied for ${body.risk_tolerance}: ${years}y lookback, ${investmentHorizonBucket} horizon, ${universeFilter.replace(/_/g, ' ')} universe.`
+    )
+  }
+
+  const matrixResult = await fetchAlignedMatrix(symbols, years, true)
   if ('error' in matrixResult) return matrixResult.error
 
   const { aligned } = matrixResult
+  const userCols = symbols.map((symbol) => aligned.symbols.indexOf(symbol))
+  const returnsOnly = aligned.R.map((row) => userCols.map((columnIndex) => row[columnIndex]))
   const sectorBySymbol = finnhubApiKey ? await fetchSectorBySymbol(symbols, finnhubApiKey) : {}
+  const benchmarkComparisons = buildBenchmarkComparisons(aligned, rfAnnual)
 
   try {
     const result = await runProfileOptimize({
       symbols,
-      R: aligned.R,
+      R: returnsOnly,
       timestamps: aligned.timestamps,
       tradingDays: aligned.tradingDays,
       rfAnnual,
@@ -236,13 +257,17 @@ async function handleProfileOptimize(body: z.infer<typeof ProfileOptimizeBodySch
       years,
       investmentHorizon: investmentHorizonBucket as never,
       riskTolerance: body.risk_tolerance,
-      universeFilter: body.universe_filter,
+      universeFilter,
       hardConstraints: body.hard_constraints,
       dataWarnings,
       sectorBySymbol,
     })
 
-    return NextResponse.json(result)
+    return NextResponse.json({
+      ...result,
+      benchmarkComparisons,
+      comparisonNote: 'Benchmark metrics use the same calendar-aligned daily return window as your basket (100% in each ETF).',
+    })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Profile optimisation failed.'
     return NextResponse.json({ error: message }, { status: 422 })
@@ -269,3 +294,4 @@ export async function POST(request: NextRequest) {
 
   return NextResponse.json({ error: 'Request body does not match a supported optimizer schema.' }, { status: 400 })
 }
+
