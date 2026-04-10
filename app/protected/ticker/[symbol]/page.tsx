@@ -31,9 +31,6 @@ export default function TickerPage() {
   const [companyTransmissionChannels, setCompanyTransmissionChannels] = useState<string[]>([])
   const [companyWhatToExploreNext, setCompanyWhatToExploreNext] = useState<string[]>([])
   const [summaryLoading, setSummaryLoading] = useState(false)
-  const [isSaved, setIsSaved] = useState(false)
-  const [saveLoading, setSaveLoading] = useState(false)
-  const [saveFeedback, setSaveFeedback] = useState('')
 
   // Analysis tab state
   const [analysis, setAnalysis] = useState<AnalysisData | null>(null)
@@ -99,24 +96,7 @@ export default function TickerPage() {
       .catch(() => setSummaryLoading(false))
   }, [symbol])
 
-  useEffect(() => {
-    if (!symbol) return
-    let cancelled = false
-    setIsSaved(false)
-    setSaveFeedback('')
-
-    fetch('/api/profile/saved-tickers')
-      .then((r) => r.ok ? r.json() : [])
-      .then((saved) => {
-        if (cancelled || !Array.isArray(saved)) return
-        setIsSaved(saved.some((item) => typeof item?.symbol === 'string' && item.symbol.toUpperCase() === symbol))
-      })
-      .catch(() => { if (!cancelled) setIsSaved(false) })
-
-    return () => { cancelled = true }
-  }, [symbol])
-
-  useEffect(() => {
+useEffect(() => {
     if (tab !== 'analysis' || analysis || analysisLoading) return
     setAnalysisLoading(true)
     setAnalysisError('')
@@ -167,28 +147,7 @@ export default function TickerPage() {
     }
   }
 
-  async function handleSaveTicker() {
-    if (saveLoading) return
-    setSaveLoading(true)
-    try {
-      const response = isSaved
-        ? await fetch('/api/profile/saved-tickers', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ symbol }) })
-        : await fetch('/api/profile/saved-tickers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ symbol, companyName: data?.name ?? null }) })
-      const payload = await response.json().catch(() => null)
-      if (!response.ok) {
-        setSaveFeedback(typeof payload?.error === 'string' ? payload.error : isSaved ? 'Could not remove ticker right now.' : 'Could not save ticker right now.')
-        return
-      }
-      setIsSaved(!isSaved)
-      setSaveFeedback(typeof payload?.message === 'string' ? payload.message : isSaved ? 'Removed from your profile.' : 'Saved to your profile.')
-    } catch {
-      setSaveFeedback(isSaved ? 'Could not remove ticker right now.' : 'Could not save ticker right now.')
-    } finally {
-      setSaveLoading(false)
-    }
-  }
-
-  const heuristics = data ? getCrisisHeuristics(data, companyKeyVulnerabilities, companyTransmissionChannels, companyWhatToExploreNext) : null
+const heuristics = data ? getCrisisHeuristics(data, companyKeyVulnerabilities, companyTransmissionChannels, companyWhatToExploreNext) : null
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', fontFamily: "'DM Sans', sans-serif" }}>
@@ -196,8 +155,8 @@ export default function TickerPage() {
       <Sidebar />
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg-base)' }}>
-        <header style={{ padding: '28px 36px 0', borderBottom: '1px solid var(--border)', background: 'var(--bg-surface)' }}>
-          <button className="btn-ghost" onClick={() => router.back()} style={{ fontSize: 12, padding: '6px 14px', marginBottom: 20, display: 'inline-flex', alignItems: 'center', gap: 6 }}>? Back</button>
+        <header style={{ padding: '28px 36px 16px', borderBottom: '1px solid var(--border)', background: 'var(--bg-surface)' }}>
+          <button className="btn-ghost" onClick={() => router.back()} style={{ fontSize: 12, padding: '6px 14px', marginBottom: 20, display: 'inline-flex', alignItems: 'center', gap: 6 }}>← Back</button>
 
           {loading ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
@@ -221,14 +180,11 @@ export default function TickerPage() {
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                     <span className="badge-neutral" style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4 }}>{data.exchange}</span>
                     <span className="badge-neutral" style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4 }}>{data.sector}</span>
-                    {data.website && <a href={data.website} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: 'var(--text-muted)', textDecoration: 'none' }}>? website</a>}
+                    {data.website && <a href={data.website} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: 'var(--text-muted)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 3 }}><svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1.5 8.5L8.5 1.5M8.5 1.5H4M8.5 1.5V6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>website</a>}
                   </div>
                 </div>
               </div>
               <div style={{ textAlign: 'right' }}>
-                <button type="button" className={isSaved ? 'btn-ghost' : 'btn-gold'} onClick={() => void handleSaveTicker()} disabled={saveLoading} style={{ marginBottom: 10, minWidth: 94, padding: '6px 12px', fontSize: 12, cursor: saveLoading ? 'default' : 'pointer', opacity: saveLoading ? 0.75 : 1 }}>
-                  {saveLoading ? (isSaved ? 'Unsaving...' : 'Saving...') : isSaved ? 'Unsave' : 'Save'}
-                </button>
                 <div style={{ fontSize: 36, fontWeight: 600, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
                   ${fmt(data.price)}
                 </div>
@@ -236,13 +192,12 @@ export default function TickerPage() {
                   {data.priceChange == null ? '—' : `${data.priceChange > 0 ? '+' : data.priceChange < 0 ? '-' : ''}${fmt(Math.abs(data.priceChange))}`} ({formatSignedPercent((data.priceChangePct ?? 0) / 100)})
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>Mkt Cap {fmtMarketCap(data.marketCap)}</div>
-                {saveFeedback && <div style={{ fontSize: 11, color: isSaved ? 'var(--green)' : 'var(--red)', marginTop: 6 }}>{saveFeedback}</div>}
               </div>
             </div>
           )}
 
           {!loading && !error && (
-            <div className="tab-bar" style={{ display: 'inline-flex', marginBottom: -1 }}>
+            <div className="tab-bar" style={{ display: 'inline-flex', marginBottom: -17 }}>
               {(['overview', 'financials', 'news', 'analysis', 'thesis'] as const).map(t => (
                 <button
                   key={t}
@@ -268,10 +223,10 @@ export default function TickerPage() {
 
           {!loading && error && (
             <div className="card" style={{ padding: '40px', textAlign: 'center', maxWidth: 480, margin: '60px auto' }}>
-              <div style={{ fontSize: 32, marginBottom: 16 }}>?</div>
+              <div style={{ fontSize: 32, marginBottom: 16 }}>⚠</div>
               <div style={{ fontSize: 16, color: 'var(--text-primary)', marginBottom: 8 }}>Could not load data</div>
               <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 24 }}>{error}</div>
-              <button className="btn-ghost" onClick={() => router.back()} style={{ padding: '10px 24px' }}>? Go back</button>
+              <button className="btn-ghost" onClick={() => router.back()} style={{ padding: '10px 24px' }}>← Go back</button>
             </div>
           )}
 

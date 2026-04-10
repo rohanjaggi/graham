@@ -47,10 +47,11 @@ function pctDiff(intrinsic: number, market: number): number {
 
 /* ─── SNAPSHOT CARD ──────────────────────────────────────────────────────── */
 
-function SnapshotCard({ snap, onDelete, deleting }: {
+function SnapshotCard({ snap, onDelete, deleting, showSymbol }: {
   snap: DcfSnapshot
   onDelete: (id: string) => void
   deleting: boolean
+  showSymbol?: boolean
 }) {
   const scenarios = [
     { label: 'Conservative', result: snap.results_json.conservative, color: '#F06070' },
@@ -62,7 +63,14 @@ function SnapshotCard({ snap, onDelete, deleting }: {
     <div className="card" style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{fmtDate(snap.created_at)}</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {showSymbol && (
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--gold)', letterSpacing: '0.04em' }}>
+              {snap.symbol} <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--text-muted)' }}>{snap.company_name}</span>
+            </div>
+          )}
+          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{fmtDate(snap.created_at)}</div>
+        </div>
         <button
           type="button"
           disabled={deleting}
@@ -125,7 +133,7 @@ function SnapshotCard({ snap, onDelete, deleting }: {
 /* ─── MAIN COMPONENT ─────────────────────────────────────────────────────── */
 
 export function SnapshotsTab({ symbol, refreshKey, onSwitchToDcf }: {
-  symbol: string
+  symbol?: string
   refreshKey: number
   onSwitchToDcf: () => void
 }) {
@@ -135,10 +143,10 @@ export function SnapshotsTab({ symbol, refreshKey, onSwitchToDcf }: {
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set())
 
   useEffect(() => {
-    if (!symbol) return
     setLoading(true)
     setError(null)
-    fetch(`/api/dcf-snapshots?symbol=${encodeURIComponent(symbol)}`)
+    const url = symbol ? `/api/dcf-snapshots?symbol=${encodeURIComponent(symbol)}` : '/api/dcf-snapshots'
+    fetch(url)
       .then(r => r.ok ? r.json() : Promise.reject(r.statusText))
       .then((d: { snapshots: DcfSnapshot[] }) => setSnapshots(d.snapshots))
       .catch(e => setError(typeof e === 'string' ? e : 'Failed to load snapshots'))
@@ -179,7 +187,7 @@ export function SnapshotsTab({ symbol, refreshKey, onSwitchToDcf }: {
       {/* Action bar */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-          {snapshots.length} Snapshot{snapshots.length !== 1 ? 's' : ''} · {symbol}
+          {snapshots.length} Snapshot{snapshots.length !== 1 ? 's' : ''}{symbol ? ` · ${symbol}` : ' · All Stocks'}
         </div>
         <button
           type="button"
@@ -222,7 +230,7 @@ export function SnapshotsTab({ symbol, refreshKey, onSwitchToDcf }: {
 
       {/* Snapshot list */}
       {snapshots.map(snap => (
-        <SnapshotCard key={snap.id} snap={snap} onDelete={handleDelete} deleting={deletingIds.has(snap.id)} />
+        <SnapshotCard key={snap.id} snap={snap} onDelete={handleDelete} deleting={deletingIds.has(snap.id)} showSymbol={!symbol} />
       ))}
     </div>
   )

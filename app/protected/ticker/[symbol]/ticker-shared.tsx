@@ -58,8 +58,8 @@ export function Sidebar() {
         ))}
       </nav>
       <div style={{ padding: '16px 6px', borderTop: '1px solid rgba(226, 196, 138, 0.08)' }}>
-        <div style={{ fontSize: 10.5, color: '#6A7790' }}>IS4228 | Spring 2025</div>
-        <div style={{ fontSize: 10, color: '#58657D', opacity: 0.72, marginTop: 3 }}>v0.1.0 | mock data</div>
+        <div style={{ fontSize: 10.5, color: '#6A7790' }}>IS4228 | Spring 2026</div>
+        <div style={{ fontSize: 10, color: '#58657D', opacity: 0.72, marginTop: 3 }}>v0.1.0</div>
       </div>
     </aside>
   )

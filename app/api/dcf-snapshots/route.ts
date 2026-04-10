@@ -30,17 +30,22 @@ export async function GET(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const symbol = req.nextUrl.searchParams.get('symbol')?.toUpperCase()
-  if (!symbol || !SYMBOL_RE.test(symbol)) {
-    return NextResponse.json({ error: 'Missing or invalid symbol' }, { status: 400 })
+  const symbol = req.nextUrl.searchParams.get('symbol')?.toUpperCase() ?? null
+  if (symbol !== null && !SYMBOL_RE.test(symbol)) {
+    return NextResponse.json({ error: 'Invalid symbol' }, { status: 400 })
   }
 
-  const { data, error } = await supabase
+  let query = supabase
     .from('dcf_snapshots')
     .select('*')
     .eq('user_id', user.id)
-    .eq('symbol', symbol)
     .order('created_at', { ascending: false })
+
+  if (symbol) {
+    query = query.eq('symbol', symbol)
+  }
+
+  const { data, error } = await query
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ snapshots: data })

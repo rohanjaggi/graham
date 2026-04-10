@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { formatSignedPercent, metricColorForValue } from '@/lib/ui/metricFormat'
 import { DCFTab } from './dcf-tab'
 import { SnapshotsTab } from './snapshots-tab'
-import { EmptyState, TickerSearch } from './valuation-shared'
+import { TickerSearch } from './valuation-shared'
 
 const ComparablesTab = dynamic(() => import('./comparables-tab').then((m) => m.ComparablesTab))
 
@@ -73,7 +73,12 @@ function ValuationContent() {
         <div style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>Select Company</div>
         <TickerSearch value={symbol} onSelect={handleSelect} />
         {symbol && (
-          <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 14, padding: '14px 18px', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 10 }}>
+          <div
+            style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 14, padding: '14px 18px', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 10, cursor: 'pointer', transition: 'border-color 0.15s' }}
+            onClick={() => router.push(`/protected/ticker/${symbol}`)}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--gold-dim)' }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)' }}
+          >
             {profile?.logo ? (
               <img src={profile.logo} alt={profile.name} style={{ width: 36, height: 36, objectFit: 'contain', borderRadius: 6, background: '#fff', padding: 3, flexShrink: 0 }} onError={e => { e.currentTarget.style.display = 'none' }} />
             ) : (
@@ -160,8 +165,13 @@ function ValuationContent() {
         })}
       </div>
 
-      {/* Tab content — all tabs stay mounted to preserve state; hidden via display:none */}
-      {!symbol ? <EmptyState /> : (
+      {/* Tab content */}
+      {!symbol ? (
+        <SnapshotsTab
+          refreshKey={snapshotRefreshKey}
+          onSwitchToDcf={() => switchTab('dcf')}
+        />
+      ) : (
         <>
           <div style={{ display: activeTab === 'snapshots' ? 'block' : 'none' }}>
             <SnapshotsTab
