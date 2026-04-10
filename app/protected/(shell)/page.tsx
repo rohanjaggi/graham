@@ -433,81 +433,100 @@ function OverviewPanel({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <div className="card animate-fade-up d1" style={{ padding: '22px 24px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, gap: 12 }}>
+      <div className="card animate-fade-up d1" style={{ padding: '24px 26px', background: 'linear-gradient(135deg, rgba(226,196,138,0.04) 0%, transparent 60%)', borderColor: 'rgba(226,196,138,0.12)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18, gap: 12 }}>
           <div>
-            <div style={{ fontSize: 10.5, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Latest Saved Portfolios</div>
-            <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 6 }}>
-              Pick one portfolio and the dashboard below will sync to its holdings and saved metrics.
+            <div style={{ fontSize: 10, color: 'var(--gold-dim)', letterSpacing: '0.14em', textTransform: 'uppercase', fontWeight: 600 }}>Saved Portfolios</div>
+            <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 5, lineHeight: 1.4 }}>
+              Select a portfolio to sync the dashboard to its holdings.
             </div>
           </div>
-          <Link href="/protected/portfolios" className="btn-ghost" style={{ textDecoration: 'none', fontSize: 12 }}>
-            View All
+          <Link href="/protected/portfolios" className="btn-ghost" style={{ textDecoration: 'none', fontSize: 12, whiteSpace: 'nowrap' }}>
+            View All →
           </Link>
         </div>
 
         {latestPortfolios.length === 0 ? (
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 10, padding: '16px 18px' }}>
+          <div style={{
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 20,
+            background: 'linear-gradient(135deg, rgba(226,196,138,0.06) 0%, rgba(226,196,138,0.02) 100%)',
+            border: '1px dashed rgba(226,196,138,0.2)',
+            borderRadius: 12, padding: '22px 24px',
+          }}>
             <div>
-              <div className="font-display" style={{ fontSize: 18 }}>No saved portfolios yet</div>
-              <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 4 }}>
-                Save your first optimized allocation to start building a portfolio history.
+              <div className="font-display" style={{ fontSize: 20, color: 'var(--text-primary)', letterSpacing: '-0.01em' }}>No portfolios yet</div>
+              <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 5 }}>
+                Run the optimiser to build and save your first allocation.
               </div>
             </div>
-            <Link href="/protected/optimiser" className="btn-gold" style={{ textDecoration: 'none', fontSize: 12 }}>
-              Create One
+            <Link href="/protected/optimiser" className="btn-gold" style={{ textDecoration: 'none', fontSize: 12.5, whiteSpace: 'nowrap' }}>
+              Open Optimiser →
             </Link>
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
-            {latestPortfolios.map((portfolio) => (
-              <div
-                key={portfolio.id}
-                role="button"
-                tabIndex={0}
-                onClick={() => onSelectPortfolio(portfolio.id)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault()
-                    onSelectPortfolio(portfolio.id)
-                  }
-                }}
-                style={{
-                  background: 'var(--bg-elevated)',
-                  border: portfolio.id === selectedPortfolioId ? '1px solid var(--gold)' : '1px solid var(--border)',
-                  boxShadow: portfolio.id === selectedPortfolioId ? '0 0 0 1px rgba(200,169,110,0.18) inset' : 'none',
-                  borderRadius: 10,
-                  padding: '16px 18px',
-                  height: '100%',
-                  cursor: 'pointer',
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-                  <div className="font-display" style={{ fontSize: 18, fontWeight: 500 }}>{portfolio.name}</div>
-                  {portfolio.id === selectedPortfolioId && (
-                    <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--gold)', background: 'rgba(200,169,110,0.16)', padding: '3px 8px', borderRadius: 999 }}>
-                      Selected
-                    </span>
-                  )}
-                </div>
-                <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 6 }}>
-                  {portfolio.investmentHorizonBucket} horizon · {formatRiskLabel(portfolio.riskTolerance)} risk
-                </div>
-                <div style={{ display: 'grid', gap: 6, marginTop: 14, fontSize: 12.5 }}>
-                    <div style={{ color: metricColorForValue(portfolio.expectedAnnualReturn) }}>Return {formatSignedPercent(portfolio.expectedAnnualReturn)}</div>
-                    <div style={{ color: 'var(--text-secondary)' }}>Vol {formatPercent(portfolio.expectedAnnualVolatility)}</div>
-                    <div style={{ color: 'var(--text-secondary)' }}>Sharpe {portfolio.sharpeRatio.toFixed(2)}</div>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 14, gap: 12 }}>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                    Updated {formatPortfolioDate(portfolio.updatedAt)}
+            {latestPortfolios.map((portfolio) => {
+              const isSelected = portfolio.id === selectedPortfolioId
+              return (
+                <div
+                  key={portfolio.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => onSelectPortfolio(portfolio.id)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      onSelectPortfolio(portfolio.id)
+                    }
+                  }}
+                  style={{
+                    background: isSelected
+                      ? 'linear-gradient(135deg, rgba(226,196,138,0.12) 0%, rgba(200,165,100,0.06) 100%)'
+                      : 'var(--bg-elevated)',
+                    border: isSelected ? '1px solid rgba(226,196,138,0.4)' : '1px solid var(--border)',
+                    boxShadow: isSelected ? '0 0 20px rgba(226,196,138,0.08)' : 'none',
+                    borderRadius: 12,
+                    padding: '18px 20px',
+                    cursor: 'pointer',
+                    transition: 'border-color 0.15s, box-shadow 0.15s, background 0.15s',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+                    <div className="font-display" style={{ fontSize: 17, fontWeight: 500, color: isSelected ? 'var(--gold-bright)' : 'var(--text-primary)' }}>{portfolio.name}</div>
+                    {isSelected && (
+                      <span style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--gold)', background: 'rgba(200,169,110,0.18)', padding: '3px 9px', borderRadius: 999, letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>
+                        ACTIVE
+                      </span>
+                    )}
                   </div>
-                  <Link href={`/protected/portfolios/${portfolio.id}`} className="btn-ghost" style={{ textDecoration: 'none', fontSize: 11.5, padding: '6px 10px' }}>
-                    Open details
-                  </Link>
+                  <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 5 }}>
+                    {portfolio.investmentHorizonBucket} horizon · {formatRiskLabel(portfolio.riskTolerance)} risk
+                  </div>
+                  <div style={{ display: 'flex', gap: 16, marginTop: 14, fontSize: 12.5 }}>
+                    <div>
+                      <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 2 }}>Return</div>
+                      <div style={{ color: metricColorForValue(portfolio.expectedAnnualReturn), fontWeight: 500 }}>{formatSignedPercent(portfolio.expectedAnnualReturn)}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 2 }}>Vol</div>
+                      <div style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>{formatPercent(portfolio.expectedAnnualVolatility)}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 2 }}>Sharpe</div>
+                      <div style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>{portfolio.sharpeRatio.toFixed(2)}</div>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 14, gap: 12 }}>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                      {formatPortfolioDate(portfolio.updatedAt)}
+                    </div>
+                    <Link href={`/protected/portfolios/${portfolio.id}`} className="btn-ghost" style={{ textDecoration: 'none', fontSize: 11.5, padding: '5px 10px' }}>
+                      Details →
+                    </Link>
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>
@@ -667,7 +686,7 @@ function OverviewPanel({
         </table>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
         {[
           {
             title: 'DCF Valuation',
@@ -720,38 +739,31 @@ function OverviewPanel({
         ].map((cardData, i) => {
           const card = (
             <div
-              className={`card animate-fade-up d${(i % 4) + 1}`}
+              className={`card animate-fade-up d${(i % 3) + 1}`}
               style={{
                 padding: '22px 24px',
-                cursor: cardData.href ? 'pointer' : 'default',
+                cursor: 'pointer',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: 10,
-                minHeight: 176,
-                border: cardData.href ? '1px solid var(--border)' : '1px dashed var(--border)',
-                opacity: cardData.href ? 1 : 0.7,
+                height: '100%',
               }}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
                 <div className="font-display" style={{ fontSize: 18, fontWeight: 500 }}>{cardData.title}</div>
-                <span style={{ fontSize: 10, fontWeight: 600, color: cardData.badgeColor, background: `${cardData.badgeColor}18`, padding: '3px 8px', borderRadius: 4, whiteSpace: 'nowrap', letterSpacing: '0.04em' }}>
+                <span style={{ fontSize: 10, fontWeight: 600, color: cardData.badgeColor, background: `${cardData.badgeColor}18`, padding: '3px 8px', borderRadius: 4, whiteSpace: 'nowrap', letterSpacing: '0.04em', flexShrink: 0 }}>
                   {cardData.badge}
                 </span>
               </div>
-              <p style={{ fontSize: 12.5, color: 'var(--text-muted)', lineHeight: 1.65 }}>{cardData.desc}</p>
-              <div style={{ fontSize: 12.5, color: 'var(--gold)', marginTop: 4, fontWeight: 500 }}>{cardData.cta}</div>
+              <p style={{ fontSize: 12.5, color: 'var(--text-muted)', lineHeight: 1.65, marginTop: 10, flex: 1 }}>{cardData.desc}</p>
+              <div style={{ fontSize: 12.5, color: 'var(--gold)', marginTop: 16, fontWeight: 500 }}>{cardData.cta}</div>
             </div>
           )
 
-          if (cardData.href) {
-            return (
-              <Link key={i} href={cardData.href} style={{ textDecoration: 'none', color: 'inherit' }}>
-                {card}
-              </Link>
-            )
-          }
-
-          return <div key={i}>{card}</div>
+          return (
+            <Link key={i} href={cardData.href} style={{ textDecoration: 'none', color: 'inherit', display: 'flex' }}>
+              {card}
+            </Link>
+          )
         })}
       </div>
     </div>

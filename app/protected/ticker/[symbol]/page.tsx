@@ -1,12 +1,13 @@
 'use client'
 
+import dynamic from 'next/dynamic'
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { formatSignedPercent, metricColorForValue } from '@/lib/ui/metricFormat'
-import { Sidebar, Skeleton } from './ticker-shared'
+import { FinRow, MetricCard, PriceChart, Sidebar, Skeleton } from './ticker-shared'
 import type { AnalysisData, CompanySummaryResponse, TickerData } from './ticker-types'
 import type { FinancialsApiResponse } from '@/app/api/ticker/[symbol]/financials/route'
-import { fmt, fmtMarketCap, getCrisisHeuristics } from './ticker-utils'
+import { fmt, fmtDate, fmtMarketCap, getCrisisHeuristics, riskBadgeStyle } from './ticker-utils'
 
 const OverviewTab = dynamic(() => import('./ticker-tabs').then((m) => m.OverviewTab))
 const FinancialsTab = dynamic(() => import('./ticker-tabs').then((m) => m.FinancialsTab))

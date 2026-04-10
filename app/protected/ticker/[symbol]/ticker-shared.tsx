@@ -5,37 +5,61 @@ import { useRouter } from 'next/navigation'
 import { formatSignedPercent, metricColorForValue } from '@/lib/ui/metricFormat'
 import { fmt } from './ticker-utils'
 
-const NAV = [
-  { section: 'ANALYSIS', items: [{ label: 'Overview', href: '/protected' }, { label: 'Research', href: '/protected/research' }, { label: 'Technical' }] },
-  { section: 'VALUATION', items: [{ label: 'Valuation', href: '/protected/valuation' }] },
-  { section: 'PORTFOLIO', items: [{ label: 'Optimiser', href: '/protected/optimiser' }, { label: 'Tail Risk' }] },
+type NavIconName = 'overview' | 'research' | 'screener' | 'valuation' | 'optimiser' | 'portfolios' | 'tailRisk'
+
+const NAV: { section: string; items: { label: string; href?: string; icon: NavIconName }[] }[] = [
+  { section: 'ANALYSIS', items: [{ label: 'Overview', href: '/protected', icon: 'overview' }, { label: 'Research', href: '/protected/research', icon: 'research' }, { label: 'Screener', href: '/protected/qa', icon: 'screener' }] },
+  { section: 'VALUATION', items: [{ label: 'Valuation', href: '/protected/valuation', icon: 'valuation' }] },
+  { section: 'PORTFOLIO', items: [{ label: 'Optimiser', href: '/protected/optimiser', icon: 'optimiser' }, { label: 'Portfolios', href: '/protected/portfolios', icon: 'portfolios' }, { label: 'Tail Risk', href: '/protected/tail-risk', icon: 'tailRisk' }] },
 ]
+
+function NavIcon({ name }: { name: NavIconName }) {
+  const common = { width: 16, height: 16, viewBox: '0 0 16 16', fill: 'none', xmlns: 'http://www.w3.org/2000/svg', style: { display: 'block' as const } }
+  switch (name) {
+    case 'overview':
+      return <svg {...common} aria-hidden="true"><path d="M2.5 7.5L8 3L13.5 7.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" /><path d="M4 6.8V12.5H6.5V10H9.5V12.5H12V6.8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+    case 'research':
+      return <svg {...common} aria-hidden="true"><rect x="3.5" y="2" width="9" height="12" rx="1.5" stroke="currentColor" strokeWidth="1.2" /><path d="M5.5 5.5H10.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" /><path d="M5.5 8H10.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" /><path d="M5.5 10.5H8.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" /></svg>
+    case 'screener':
+      return <svg {...common} aria-hidden="true"><path d="M2 3.5H14L9.5 8.5V13L6.5 11.5V8.5L2 3.5Z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+    case 'valuation':
+      return <svg {...common} aria-hidden="true"><path d="M8 3V13" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" /><path d="M5 3H11" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" /><path d="M5 13H11" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" /><path d="M3.5 6L5 10H2L3.5 6Z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" /><path d="M12.5 6L14 10H11L12.5 6Z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+    case 'optimiser':
+      return <svg {...common} aria-hidden="true"><path d="M2.5 5H13.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" /><path d="M2.5 11H13.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" /><circle cx="6" cy="5" r="2" fill="currentColor" /><circle cx="10" cy="11" r="2" fill="currentColor" /></svg>
+    case 'portfolios':
+      return <svg {...common} aria-hidden="true"><circle cx="8" cy="8" r="5.5" stroke="currentColor" strokeWidth="1.2" /><path d="M8 8V2.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" /><path d="M8 8L12.76 10.75" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" /><path d="M8 8L4.5 12.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" /></svg>
+    case 'tailRisk':
+      return <svg {...common} aria-hidden="true"><path d="M8 2L13.5 4.5V8.5C13.5 11.5 11 13.5 8 14.5C5 13.5 2.5 11.5 2.5 8.5V4.5L8 2Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" /><path d="M8 6.5V9.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" /><circle cx="8" cy="11.5" r="0.75" fill="currentColor" /></svg>
+  }
+}
 
 export function Sidebar() {
   const router = useRouter()
   return (
-    <aside style={{ width: 224, minWidth: 224, height: '100vh', background: 'var(--bg-surface)', borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', padding: '0 14px' }}>
-      <div style={{ padding: '0 6px 14px', borderBottom: '1px solid var(--border)', cursor: 'pointer', textAlign: 'center' }} onClick={() => router.push('/protected')}>
-        <img src="/images/graham-logo.png" alt="Graham" style={{ width: 140, height: 140, objectFit: 'contain', filter: 'invert(1) sepia(1) saturate(2) hue-rotate(5deg) brightness(0.85)', display: 'block', margin: '-20px auto -30px' }} />
+    <aside style={{ width: 224, minWidth: 224, height: '100vh', background: 'linear-gradient(180deg, #0B1220 0%, #0E1628 52%, #0A1120 100%)', borderRight: '1px solid rgba(226, 196, 138, 0.08)', display: 'flex', flexDirection: 'column', padding: '0 14px' }}>
+      <div style={{ padding: '0 6px 14px', borderBottom: '1px solid rgba(226, 196, 138, 0.08)', cursor: 'pointer', textAlign: 'center' }} onClick={() => router.push('/protected')}>
+        <img src="/images/graham-logo.png" alt="Graham" style={{ width: 140, height: 140, objectFit: 'contain', filter: 'invert(1) sepia(1) saturate(1.4) hue-rotate(355deg) brightness(0.9)', display: 'block', margin: '-15px auto -30px' }} />
         <div className="font-display text-gold-gradient" style={{ fontSize: 28, fontWeight: 500, letterSpacing: '-0.02em', lineHeight: 1 }}>Graham</div>
-        <div style={{ fontSize: 9.5, color: 'var(--text-muted)', letterSpacing: '0.13em', marginTop: 5, textTransform: 'uppercase' }}>Long-Term Intelligence</div>
+        <div style={{ fontSize: 9.5, color: '#74819A', letterSpacing: '0.13em', marginTop: 5, textTransform: 'uppercase' }}>Long-Term Intelligence</div>
       </div>
       <nav style={{ flex: 1, paddingTop: 18, overflowY: 'auto' }}>
         {NAV.map(({ section, items }) => (
           <div key={section} style={{ marginBottom: 22 }}>
-            <div style={{ fontSize: 9.5, fontWeight: 600, letterSpacing: '0.13em', color: 'var(--text-muted)', padding: '0 14px 8px', textTransform: 'uppercase' }}>{section}</div>
-            {items.map(({ label, href }) => (
+            <div style={{ fontSize: 9.5, fontWeight: 600, letterSpacing: '0.13em', color: '#60708D', padding: '0 14px 8px', textTransform: 'uppercase' }}>{section}</div>
+            {items.map(({ label, href, icon }) => (
               <div key={label} className="nav-item" style={href ? { cursor: 'pointer' } : undefined} onClick={href ? () => router.push(href) : undefined}>
-                <span style={{ fontSize: 13, opacity: 0.75 }}>{label[0]}</span>
-                <span>{label}</span>
+                <span style={{ opacity: 0.8, minWidth: 24, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <NavIcon name={icon} />
+                </span>
+                {label}
               </div>
             ))}
           </div>
         ))}
       </nav>
-      <div style={{ padding: '16px 6px', borderTop: '1px solid var(--border)' }}>
-        <div style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>IS4228 · Spring 2025</div>
-        <div style={{ fontSize: 10, color: 'var(--text-muted)', opacity: 0.5, marginTop: 3 }}>v0.1.0 · live data</div>
+      <div style={{ padding: '16px 6px', borderTop: '1px solid rgba(226, 196, 138, 0.08)' }}>
+        <div style={{ fontSize: 10.5, color: '#6A7790' }}>IS4228 | Spring 2025</div>
+        <div style={{ fontSize: 10, color: '#58657D', opacity: 0.72, marginTop: 3 }}>v0.1.0 | mock data</div>
       </div>
     </aside>
   )
