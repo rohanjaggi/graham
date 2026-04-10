@@ -1,36 +1,72 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Graham
+
+A long-term equity intelligence platform built for IS4228. Graham brings together qualitative research, quantitative screening, DCF valuation, portfolio optimisation, and tail risk analysis in a single dark-themed interface.
+
+## Features
+
+| Module | Description |
+|---|---|
+| **Overview** | Dashboard synced to a saved portfolio — holdings table, allocation donut, portfolio value chart, and quick-access cards |
+| **Research** | Natural-language stock lookup powered by OpenAI; resolves intent queries to the best-matching ticker before running QA |
+| **Stock Screener** | Warren Buffett-style fundamental and technical filters across US-listed equities |
+| **Valuation** | DCF model with adjustable WACC, growth, and terminal assumptions; comparables tab with peer benchmarking |
+| **Portfolio Optimiser** | Mean-variance optimisation (max Sharpe, min vol, max return); save and version portfolios |
+| **Portfolios** | Saved portfolio library with per-portfolio detail pages |
+| **Tail Risk** | Maximum drawdown, historical stress scenarios, and expected shortfall metrics |
+| **Stock Page** | Per-ticker deep-dive: price chart, key metrics, financials, news, AI analysis, and crisis heuristics |
+
+## Tech Stack
+
+- **Framework** — Next.js 15 (App Router)
+- **Auth & DB** — Supabase (Postgres + Auth)
+- **Market Data** — Finnhub
+- **AI** — OpenAI (qualitative research, company analysis)
+- **SEC Filings** — EDGAR API
+- **Styling** — CSS variables, custom dark theme
 
 ## Getting Started
 
-First, run the development server:
+### 1. Install dependencies
+
+```bash
+npm install
+```
+
+### 2. Set environment variables
+
+Copy `.env.example` to `.env.local` and fill in your keys:
+
+```bash
+cp .env.example .env.local
+```
+
+| Variable | Required | Description |
+|---|---|---|
+| `OPENAI_API_KEY` | Yes | Powers qualitative research and AI analysis |
+| `FINNHUB_API_KEY` | Yes | Market data, quotes, news, financials |
+| `NEXT_PUBLIC_SUPABASE_URL` | Yes | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Yes | Supabase anon key |
+| `SEC_API_KEY` | No | Improves EDGAR filing lookup accuracy |
+
+### 3. Run the development server
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Project Structure
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```
+app/
+  api/                    # Route handlers (ticker, portfolio, screener, etc.)
+  protected/
+    (shell)/              # Main app pages (overview, research, screener, valuation…)
+    ticker/[symbol]/      # Per-ticker deep-dive page
+lib/
+  market/                 # Market data helpers
+  portfolio/              # Optimisation logic
+  sec/                    # EDGAR integration
+  ui/                     # Shared formatting utilities
+```

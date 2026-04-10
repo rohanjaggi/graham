@@ -84,7 +84,7 @@ export default function PortfoliosPage() {
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16 }}>
         <div>
           <div style={{ fontSize: 10.5, color: 'var(--gold)', letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 10 }}>Portfolio</div>
-          <h1 className="font-display" style={{ fontSize: 32, fontWeight: 500, letterSpacing: '-0.02em', marginBottom: 8 }}>Saved Portfolios</h1>
+          <h1 className="font-display text-gold-gradient" style={{ fontSize: 42, fontWeight: 500, lineHeight: 1.05, marginBottom: 8 }}>Saved Portfolios</h1>
           <p style={{ fontSize: 13.5, color: 'var(--text-muted)', lineHeight: 1.65, maxWidth: 820 }}>
             Browse every portfolio you have saved, compare the headline risk and return profile, and open any portfolio for a deeper review.
           </p>
