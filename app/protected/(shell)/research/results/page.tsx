@@ -1,15 +1,15 @@
-'use client'
+﻿'use client'
 
 import Link from 'next/link'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { useEffect, useMemo, useState } from 'react'
 
 type SearchResult = {
   symbol: string
   description: string
 }
 
-export default function ResearchResultsPage() {
+function ResearchResultsContent() {
   const searchParams = useSearchParams()
   const query = searchParams.get('q')?.trim() ?? ''
   const [results, setResults] = useState<SearchResult[]>([])
@@ -157,7 +157,7 @@ export default function ResearchResultsPage() {
                     </div>
                   </div>
                   <div style={{ color: 'var(--text-muted)', fontSize: 12.5, whiteSpace: 'nowrap' }}>
-                    Open research →
+                    Open research {'->'}
                   </div>
                 </Link>
               ))}
@@ -166,5 +166,27 @@ export default function ResearchResultsPage() {
         </div>
       </section>
     </div>
+  )
+}
+
+function ResearchResultsFallback() {
+  return (
+    <div className="animate-fade-up d1" style={{ width: '100%', margin: '4.5vh 0 0', padding: '0 4px 28px' }}>
+      <section className="card" style={{ padding: '22px 22px 24px' }}>
+        <div className="card-elevated" style={{ minHeight: 220, display: 'grid', placeItems: 'center' }}>
+          <div style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>
+            <div style={{ fontSize: 18, fontWeight: 500 }}>Loading research results...</div>
+          </div>
+        </div>
+      </section>
+    </div>
+  )
+}
+
+export default function ResearchResultsPage() {
+  return (
+    <Suspense fallback={<ResearchResultsFallback />}>
+      <ResearchResultsContent />
+    </Suspense>
   )
 }

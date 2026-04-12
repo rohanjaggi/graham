@@ -113,9 +113,36 @@ describe('portfolio persistence routes', () => {
       data_warnings: ['Applied covariance shrinkage with alpha=0.40.'],
     })
     expect(insertedPositionsPayload).toEqual([
-      { portfolio_id: 'portfolio-1', symbol: 'AAA', weight: 0.5, sector: null },
-      { portfolio_id: 'portfolio-1', symbol: 'BBB', weight: 0.3, sector: null },
-      { portfolio_id: 'portfolio-1', symbol: 'CCC', weight: 0.2, sector: null },
+      {
+        portfolio_id: 'portfolio-1',
+        symbol: 'AAA',
+        weight: 0.5,
+        sector: null,
+        industry: null,
+        company_name: null,
+        pe_snapshot: null,
+        market_value_snapshot: null,
+      },
+      {
+        portfolio_id: 'portfolio-1',
+        symbol: 'BBB',
+        weight: 0.3,
+        sector: null,
+        industry: null,
+        company_name: null,
+        pe_snapshot: null,
+        market_value_snapshot: null,
+      },
+      {
+        portfolio_id: 'portfolio-1',
+        symbol: 'CCC',
+        weight: 0.2,
+        sector: null,
+        industry: null,
+        company_name: null,
+        pe_snapshot: null,
+        market_value_snapshot: null,
+      },
     ])
   })
 
@@ -171,8 +198,8 @@ describe('portfolio persistence routes', () => {
                   return {
                     order: vi.fn().mockResolvedValue({
                       data: [
-                        { symbol: 'AAA', weight: 0.5, sector: 'Tech' },
-                        { symbol: 'BBB', weight: 0.3, sector: 'Health' },
+                        { symbol: 'AAA', weight: 0.5, sector: 'Tech', industry: 'Software', company_name: 'Alpha Apps', pe_snapshot: 22.4, market_value_snapshot: null },
+                        { symbol: 'BBB', weight: 0.3, sector: 'Health', industry: 'Biotech', company_name: 'Beta Bio', pe_snapshot: null, market_value_snapshot: null },
                       ],
                       error: null,
                     }),
@@ -206,8 +233,8 @@ describe('portfolio persistence routes', () => {
         dataWarnings: ['warning-1'],
       },
       positions: [
-        { symbol: 'AAA', weight: 0.5, sector: 'Tech' },
-        { symbol: 'BBB', weight: 0.3, sector: 'Health' },
+        { symbol: 'AAA', weight: 0.5, sector: 'Tech', industry: 'Software', companyName: 'Alpha Apps', pe: 22.4, marketValueSnapshot: null },
+        { symbol: 'BBB', weight: 0.3, sector: 'Health', industry: 'Biotech', companyName: 'Beta Bio', pe: null, marketValueSnapshot: null },
       ],
     })
   })

@@ -33,7 +33,7 @@ async function fetchSecBaseFcfMillions(symbol: string): Promise<number | null> {
 
     const facts = await fetch(`https://data.sec.gov/api/xbrl/companyfacts/CIK${cik}.json`, {
       headers: { 'User-Agent': 'Graham-App contact@graham.app' },
-      next: { revalidate: 86400 },
+      cache: 'no-store', // file can exceed Next.js 2MB cache limit
     }).then(r => (r.ok ? r.json() : null))
     if (!facts) return null
 

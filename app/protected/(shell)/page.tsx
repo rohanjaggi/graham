@@ -396,6 +396,10 @@ function OverviewPanel({
 }) {
   const overviewSnapshot = buildOverviewMockSnapshot(selectedPortfolio, selectedHoldings)
   const overviewHoldingRows = buildOverviewHoldingRows(selectedHoldings, overviewSnapshot)
+  const selectedPortfolioName =
+    selectedPortfolio?.name ??
+    latestPortfolios.find((portfolio) => portfolio.id === selectedPortfolioId)?.name ??
+    'No portfolio selected'
 
   function exportHoldingsCsv() {
     if (overviewHoldingRows.length === 0) return
@@ -413,14 +417,11 @@ function OverviewPanel({
       ]),
     ]
 
-    const csv = rows
-      .map((row) => row.map((cell) => formatCsvCell(cell)).join(','))
-      .join('\n')
-
+    const csv = rows.map((row) => row.map((cell) => formatCsvCell(cell)).join(',')).join('\n')
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const anchor = document.createElement('a')
-    const baseName = selectedPortfolio?.name?.trim() || 'portfolio-overview'
+    const baseName = selectedPortfolio?.name?.trim() || selectedPortfolioId || 'portfolio-overview'
     const safeName = baseName.replace(/[^a-z0-9-_]+/gi, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').toLowerCase()
 
     anchor.href = url
@@ -436,23 +437,29 @@ function OverviewPanel({
       <div className="card animate-fade-up d1" style={{ padding: '24px 26px', background: 'linear-gradient(135deg, rgba(226,196,138,0.04) 0%, transparent 60%)', borderColor: 'rgba(226,196,138,0.12)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18, gap: 12 }}>
           <div>
-            <div style={{ fontSize: 10, color: 'var(--gold-dim)', letterSpacing: '0.14em', textTransform: 'uppercase', fontWeight: 600 }}>Saved Portfolios</div>
+            <div style={{ fontSize: 10, color: 'var(--gold-dim)', letterSpacing: '0.14em', textTransform: 'uppercase', fontWeight: 600 }}>Latest Saved Portfolios</div>
             <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 5, lineHeight: 1.4 }}>
-              Select a portfolio to sync the dashboard to its holdings.
+              Choose a portfolio to sync the dashboard metrics, chart, allocation, and holdings table.
             </div>
           </div>
           <Link href="/protected/portfolios" className="btn-ghost" style={{ textDecoration: 'none', fontSize: 12, whiteSpace: 'nowrap' }}>
-            View All →
+            View All
           </Link>
         </div>
 
         {latestPortfolios.length === 0 ? (
-          <div style={{
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 20,
-            background: 'linear-gradient(135deg, rgba(226,196,138,0.06) 0%, rgba(226,196,138,0.02) 100%)',
-            border: '1px dashed rgba(226,196,138,0.2)',
-            borderRadius: 12, padding: '22px 24px',
-          }}>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: 20,
+              background: 'linear-gradient(135deg, rgba(226,196,138,0.06) 0%, rgba(226,196,138,0.02) 100%)',
+              border: '1px dashed rgba(226,196,138,0.2)',
+              borderRadius: 12,
+              padding: '22px 24px',
+            }}
+          >
             <div>
               <div className="font-display" style={{ fontSize: 20, color: 'var(--text-primary)', letterSpacing: '-0.01em' }}>No portfolios yet</div>
               <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 5 }}>
@@ -460,7 +467,7 @@ function OverviewPanel({
               </div>
             </div>
             <Link href="/protected/optimiser" className="btn-gold" style={{ textDecoration: 'none', fontSize: 12.5, whiteSpace: 'nowrap' }}>
-              Open Optimiser →
+              Open Optimiser
             </Link>
           </div>
         ) : (
@@ -495,12 +502,12 @@ function OverviewPanel({
                     <div className="font-display" style={{ fontSize: 17, fontWeight: 500, color: isSelected ? 'var(--gold-bright)' : 'var(--text-primary)' }}>{portfolio.name}</div>
                     {isSelected && (
                       <span style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--gold)', background: 'rgba(200,169,110,0.18)', padding: '3px 9px', borderRadius: 999, letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>
-                        ACTIVE
+                        SELECTED
                       </span>
                     )}
                   </div>
                   <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 5 }}>
-                    {portfolio.investmentHorizonBucket} horizon · {formatRiskLabel(portfolio.riskTolerance)} risk
+                    {portfolio.investmentHorizonBucket} horizon - {formatRiskLabel(portfolio.riskTolerance)} risk
                   </div>
                   <div style={{ display: 'flex', gap: 16, marginTop: 14, fontSize: 12.5 }}>
                     <div>
@@ -520,8 +527,13 @@ function OverviewPanel({
                     <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                       {formatPortfolioDate(portfolio.updatedAt)}
                     </div>
-                    <Link href={`/protected/portfolios/${portfolio.id}`} className="btn-ghost" style={{ textDecoration: 'none', fontSize: 11.5, padding: '5px 10px' }}>
-                      Details →
+                    <Link
+                      href={`/protected/portfolios/${portfolio.id}`}
+                      className="btn-ghost"
+                      style={{ textDecoration: 'none', fontSize: 11.5, padding: '5px 10px' }}
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      Open details
                     </Link>
                   </div>
                 </div>
@@ -529,47 +541,57 @@ function OverviewPanel({
             })}
           </div>
         )}
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginTop: 16, paddingTop: 14, borderTop: '1px solid rgba(125, 137, 158, 0.12)' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <span style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Selected Portfolio</span>
+            <span style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 600 }}>{selectedPortfolioName}</span>
+          </div>
+          {loadingSelected && (
+            <span style={{ fontSize: 12, color: 'var(--gold)' }}>Loading selected portfolio...</span>
+          )}
+        </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
-          {[
-            {
-              label: 'Portfolio Value',
-              value: overviewSnapshot.portfolioValue,
-              sub: overviewSnapshot.portfolioValueSub,
-              valueColor: 'var(--text-primary)',
-              subColor: overviewSnapshot.portfolioValueSub.startsWith('-') ? 'var(--red)' : 'var(--green)',
-            },
-            {
-              label: 'Total Return',
-              value: overviewSnapshot.totalReturn,
-              sub: overviewSnapshot.totalReturnSub,
-              valueColor: selectedPortfolio ? metricColorForValue(selectedPortfolio.expectedAnnualReturn) : 'var(--text-primary)',
-              subColor: 'var(--text-muted)',
-            },
-            {
-              label: 'Sharpe Ratio',
-              value: overviewSnapshot.sharpe,
-              sub: overviewSnapshot.sharpeSub,
-              valueColor: 'var(--text-primary)',
-              subColor: 'var(--green)',
-            },
-            {
-              label: 'Max Drawdown',
-              value: overviewSnapshot.maxDrawdown,
-              sub: overviewSnapshot.maxDrawdownSub,
-              valueColor: 'var(--red)',
-              subColor: 'var(--red)',
-            },
-          ].map((metric, i) => (
-            <div key={i} className={`card animate-fade-up d${i + 1}`} style={{ padding: '20px 22px' }}>
-              <div style={{ fontSize: 10.5, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 10 }}>{metric.label}</div>
-              <div className="font-display" style={{ fontSize: 30, fontWeight: 500, letterSpacing: '-0.02em', color: metric.valueColor }}>
-                {metric.value}
-              </div>
-              <div style={{ fontSize: 11.5, color: metric.subColor, marginTop: 6 }}>{metric.sub}</div>
+        {[
+          {
+            label: 'Portfolio Value',
+            value: overviewSnapshot.portfolioValue,
+            sub: overviewSnapshot.portfolioValueSub,
+            valueColor: 'var(--text-primary)',
+            subColor: overviewSnapshot.portfolioValueSub.startsWith('-') ? 'var(--red)' : 'var(--green)',
+          },
+          {
+            label: 'Total Return',
+            value: overviewSnapshot.totalReturn,
+            sub: overviewSnapshot.totalReturnSub,
+            valueColor: selectedPortfolio ? metricColorForValue(selectedPortfolio.expectedAnnualReturn) : 'var(--text-primary)',
+            subColor: 'var(--text-muted)',
+          },
+          {
+            label: 'Sharpe Ratio',
+            value: overviewSnapshot.sharpe,
+            sub: overviewSnapshot.sharpeSub,
+            valueColor: 'var(--text-primary)',
+            subColor: 'var(--green)',
+          },
+          {
+            label: 'Max Drawdown',
+            value: overviewSnapshot.maxDrawdown,
+            sub: overviewSnapshot.maxDrawdownSub,
+            valueColor: 'var(--red)',
+            subColor: 'var(--red)',
+          },
+        ].map((metric, i) => (
+          <div key={i} className={`card animate-fade-up d${i + 1}`} style={{ padding: '20px 22px' }}>
+            <div style={{ fontSize: 10.5, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 10 }}>{metric.label}</div>
+            <div className="font-display" style={{ fontSize: 30, fontWeight: 500, letterSpacing: '-0.02em', color: metric.valueColor }}>
+              {metric.value}
             </div>
-          ))}
+            <div style={{ fontSize: 11.5, color: metric.subColor, marginTop: 6 }}>{metric.sub}</div>
+          </div>
+        ))}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.35fr) minmax(320px, 0.65fr)', gap: 16, alignItems: 'stretch' }}>
@@ -629,8 +651,13 @@ function OverviewPanel({
       </div>
 
       <div className="card animate-fade-up d5" style={{ padding: '22px 24px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
-          <div style={{ fontSize: 10.5, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Holdings</div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18, gap: 16 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <div style={{ fontSize: 10.5, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Holdings</div>
+            <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+              {selectedPortfolioName}{overviewHoldingRows.length > 0 ? ` - ${overviewHoldingRows.length} positions` : ''}
+            </div>
+          </div>
           <button
             type="button"
             className="btn-ghost"
@@ -657,7 +684,7 @@ function OverviewPanel({
               <tr key={holding.symbol} style={{ borderBottom: '1px solid var(--border)' }}>
                 <td style={{ padding: '14px 0', fontWeight: 700, color: 'var(--gold)', fontSize: 13, letterSpacing: '0.03em' }}>{holding.symbol}</td>
                 <td style={{ fontSize: 13, color: 'var(--text-primary)', paddingRight: 16 }}>{holding.companyName}</td>
-                <td style={{ fontSize: 12, color: 'var(--text-muted)', paddingRight: 16 }}>{holding.sector ?? '—'}</td>
+                <td style={{ fontSize: 12, color: 'var(--text-muted)', paddingRight: 16 }}>{holding.sector ?? '--'}</td>
                 <td style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 500, paddingRight: 16 }}>{formatCurrencyShort(holding.value)}</td>
                 <td style={{ paddingRight: 16 }}>
                   <span className={holding.gainPct >= 0 ? 'badge-up' : 'badge-down'}>
@@ -686,14 +713,14 @@ function OverviewPanel({
         </table>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 14, alignItems: 'stretch' }}>
         {[
           {
             title: 'DCF Valuation',
-            badge: 'AAPL · -30% upside',
+            badge: 'AAPL -30% upside',
             badgeColor: 'var(--red)',
             desc: 'Intrinsic value estimate via discounted free cash flow with adjustable WACC, growth, and terminal assumptions.',
-            cta: 'Open valuation →',
+            cta: 'Open valuation ->',
             href: '/protected/valuation',
           },
           {
@@ -701,7 +728,7 @@ function OverviewPanel({
             badge: selectedPortfolio ? formatObjectiveLabel(selectedPortfolio.objective) : 'Sharpe-focused',
             badgeColor: 'var(--green)',
             desc: 'Create optimized allocations, save them into your portfolio library, and revisit each portfolio from a dedicated detail page.',
-            cta: 'Open portfolios →',
+            cta: 'Open portfolios ->',
             href: '/protected/portfolios',
           },
           {
@@ -709,7 +736,7 @@ function OverviewPanel({
             badge: selectedPortfolio ? `MDD ${formatDownsidePercent(selectedPortfolio.maxDrawdown)}` : 'Stress scenarios',
             badgeColor: 'var(--blue)',
             desc: 'Maximum drawdown analysis, historical stress scenarios, and expected shortfall metrics.',
-            cta: 'View tail risk →',
+            cta: 'View tail risk ->',
             href: '/protected/tail-risk',
           },
           {
@@ -717,7 +744,7 @@ function OverviewPanel({
             badge: selectedHoldings[0] ? `${selectedHoldings[0].symbol} peers` : 'Peer set',
             badgeColor: 'var(--gold)',
             desc: 'Rapid peer benchmarking across P/E, EV/EBITDA, P/B, ROE, and analyst price targets.',
-            cta: 'Open comparables →',
+            cta: 'Open comparables ->',
             href: '/protected/valuation?tab=comparables',
           },
           {
@@ -725,15 +752,15 @@ function OverviewPanel({
             badge: selectedHoldings[0] ? `${selectedHoldings[0].symbol} research` : 'Research-ready',
             badgeColor: 'var(--green)',
             desc: 'Company snapshot on ticker search: bull and bear thesis, moat, key risks, and analyst consensus.',
-            cta: 'Open research →',
+            cta: 'Open research ->',
             href: '/protected/research',
           },
           {
             title: 'Stock Screener',
             badge: 'Active',
             badgeColor: 'var(--green)',
-            desc: 'Filter the market by fundamentals and technicals — P/E, ROE, margin, market cap, YTD return, and more.',
-            cta: 'Open screener →',
+            desc: 'Filter the market by fundamentals and technicals - P/E, ROE, margin, market cap, YTD return, and more.',
+            cta: 'Open screener ->',
             href: '/protected/qa',
           },
         ].map((cardData, i) => {
@@ -746,6 +773,8 @@ function OverviewPanel({
                 display: 'flex',
                 flexDirection: 'column',
                 height: '100%',
+                minHeight: 126,
+                width: '100%',
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
@@ -760,7 +789,7 @@ function OverviewPanel({
           )
 
           return (
-            <Link key={i} href={cardData.href} style={{ textDecoration: 'none', color: 'inherit', display: 'flex' }}>
+            <Link key={i} href={cardData.href} style={{ textDecoration: 'none', color: 'inherit', display: 'flex', width: '100%', minWidth: 0 }}>
               {card}
             </Link>
           )
@@ -769,4 +798,3 @@ function OverviewPanel({
     </div>
   )
 }
-

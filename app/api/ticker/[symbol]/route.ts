@@ -13,7 +13,7 @@ export async function GET(
   const base = 'https://finnhub.io/api/v1'
   const today = new Date()
   const from = new Date(today)
-  from.setDate(today.getDate() - 7)
+  from.setDate(today.getDate() - 30)
   const toStr = today.toISOString().split('T')[0]
   const fromStr = from.toISOString().split('T')[0]
 
@@ -21,7 +21,7 @@ export async function GET(
     fetchMergedCompanySnapshot(sym, key),
     fetch(`${base}/company-news?symbol=${sym}&from=${fromStr}&to=${toStr}&token=${key}`, { next: { revalidate: 900 } })
       .then((response) => (response.ok ? response.json() : []))
-      .then((payload) => (Array.isArray(payload) ? payload.slice(0, 5) : []))
+      .then((payload) => (Array.isArray(payload) ? payload.slice(0, 12) : []))
       .catch(() => []),
   ])
 

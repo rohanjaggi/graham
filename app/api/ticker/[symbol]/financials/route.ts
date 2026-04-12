@@ -51,6 +51,15 @@ export interface FinancialsApiResponse {
   segments: RevenueSegment[] | null
 }
 
+const FINANCIALS_CACHE_TTL_MS = 6 * 60 * 60 * 1000
+
+declare global {
+  var __grahamFinancialsCache: Map<string, { data: FinancialsApiResponse; expiresAt: number }> | undefined
+}
+
+const financialsCache = globalThis.__grahamFinancialsCache ?? new Map<string, { data: FinancialsApiResponse; expiresAt: number }>()
+globalThis.__grahamFinancialsCache = financialsCache
+
 function numOrNull(v: unknown): number | null {
   return typeof v === 'number' && Number.isFinite(v) ? v : null
 }
@@ -397,6 +406,11 @@ export async function GET(
   const fKey = process.env.FINNHUB_API_KEY
   if (!fKey) return NextResponse.json({ error: 'Missing FINNHUB_API_KEY' }, { status: 500 })
 
+  const cached = financialsCache.get(sym)
+  if (cached && cached.expiresAt > Date.now()) {
+    return NextResponse.json(cached.data)
+  }
+
   const base = 'https://finnhub.io/api/v1'
 
   const [metricsRes, financialsRes, segmentsRes] = await Promise.allSettled([
@@ -500,6 +514,11 @@ export async function GET(
     extendedMetrics,
     segments,
   }
+
+  financialsCache.set(sym, {
+    data: response,
+    expiresAt: Date.now() + FINANCIALS_CACHE_TTL_MS,
+  })
 
   return NextResponse.json(response)
 }

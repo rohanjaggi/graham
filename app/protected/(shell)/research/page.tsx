@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -6,6 +6,14 @@ import { useRouter } from 'next/navigation'
 type SearchResult = {
   symbol: string
   description: string
+}
+
+type SavedTicker = {
+  id: string
+  symbol: string
+  companyName: string | null
+  createdAt: string
+  updatedAt: string
 }
 
 const TICKER_PATTERN = /^[A-Z][A-Z0-9.-]{0,9}$/
@@ -29,7 +37,7 @@ export default function ResearchSearchPage() {
   const [results, setResults] = useState<SearchResult[]>([])
   const [searching, setSearching] = useState(false)
   const [open, setOpen] = useState(false)
-  const [savedTickerSymbols, setSavedTickerSymbols] = useState<string[]>([])
+  const [savedTickers, setSavedTickers] = useState<SavedTicker[]>([])
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
 
@@ -60,13 +68,14 @@ export default function ResearchSearchPage() {
 
         const saved = await response.json()
         if (!Array.isArray(saved) || cancelled) return
-
-        const symbols = saved
-          .map((item) => typeof item?.symbol === 'string' ? item.symbol.toUpperCase() : '')
-          .filter((symbol): symbol is string => symbol.length > 0)
-
-        // Keep insertion order while removing duplicates.
-        setSavedTickerSymbols(Array.from(new Set(symbols)))
+        setSavedTickers(
+          saved.filter((item): item is SavedTicker => (
+            typeof item?.id === 'string'
+            && typeof item?.symbol === 'string'
+            && typeof item?.createdAt === 'string'
+            && typeof item?.updatedAt === 'string'
+          ))
+        )
       } catch {
         // Leave empty if unavailable.
       }
@@ -78,14 +87,32 @@ export default function ResearchSearchPage() {
     }
   }, [])
 
-  function handleSelect(symbol: string) {
+  function handleSelect(symbol: string, description?: string) {
     setQuery('')
     setResults([])
     setOpen(false)
-    router.push(`/protected/qa?ticker=${encodeURIComponent(symbol)}`)
+    router.push(`/protected/ticker/${encodeURIComponent(symbol)}`)
   }
 
-  const quickExploreSymbols = savedTickerSymbols
+  const quickExploreSymbols = savedTickers.map((item) => item.symbol)
+
+  async function handleRemoveSavedTicker(symbol: string) {
+    try {
+      const response = await fetch('/api/profile/saved-tickers', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symbol }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to delete ticker')
+      }
+
+      setSavedTickers((current) => current.filter((item) => item.symbol !== symbol))
+    } catch {
+      setError('Unable to remove saved ticker right now. Please try again.')
+    }
+  }
 
   function handleQueryChange(value: string) {
     setQuery(value)
@@ -130,20 +157,24 @@ export default function ResearchSearchPage() {
     }, 300)
   }
 
-  async function resolveSymbol(rawQuery: string): Promise<string | null> {
+  async function resolveSymbol(rawQuery: string): Promise<SearchResult | null> {
     const trimmed = rawQuery.trim()
     if (!trimmed) return null
 
     const uppercase = trimmed.toUpperCase()
     const response = await fetch(`/api/ticker/search?q=${encodeURIComponent(trimmed)}`)
     if (!response.ok) {
-      if (TICKER_PATTERN.test(uppercase) && await tickerExists(uppercase)) return uppercase
+      if (TICKER_PATTERN.test(uppercase) && await tickerExists(uppercase)) {
+        return { symbol: uppercase, description: uppercase }
+      }
       return null
     }
 
     const ranked = await response.json()
     if (!Array.isArray(ranked)) {
-      if (TICKER_PATTERN.test(uppercase) && await tickerExists(uppercase)) return uppercase
+      if (TICKER_PATTERN.test(uppercase) && await tickerExists(uppercase)) {
+        return { symbol: uppercase, description: uppercase }
+      }
       return null
     }
 
@@ -152,12 +183,14 @@ export default function ResearchSearchPage() {
     })
 
     const exact = normalized.find((item) => item.symbol.toUpperCase() === uppercase)
-    if (exact) return exact.symbol.toUpperCase()
+    if (exact) return { symbol: exact.symbol.toUpperCase(), description: exact.description }
 
-    if (TICKER_PATTERN.test(uppercase) && await tickerExists(uppercase)) return uppercase
+    if (TICKER_PATTERN.test(uppercase) && await tickerExists(uppercase)) {
+      return { symbol: uppercase, description: uppercase }
+    }
 
     const best = normalized.find((item) => item.symbol.length > 0)
-    return best?.symbol ?? null
+    return best ? { symbol: best.symbol.toUpperCase(), description: best.description } : null
   }
 
   async function handleSearch(e: FormEvent<HTMLFormElement>) {
@@ -166,13 +199,13 @@ export default function ResearchSearchPage() {
 
     setLoading(true)
     try {
-      const symbol = await resolveSymbol(query)
-      if (!symbol) {
+      const match = await resolveSymbol(query)
+      if (!match) {
         setError('No matching ticker found. Try another company or symbol.')
         return
       }
 
-      handleSelect(symbol)
+      handleSelect(match.symbol, match.description)
     } catch {
       setError('Search is temporarily unavailable. Please try again.')
     } finally {
@@ -184,12 +217,12 @@ export default function ResearchSearchPage() {
     setError('')
     setLoading(true)
     try {
-      const symbol = await resolveSymbol(rawQuery)
-      if (!symbol) {
+      const match = await resolveSymbol(rawQuery)
+      if (!match) {
         setError('No matching ticker found. Try another company or symbol.')
         return
       }
-      handleSelect(symbol)
+      handleSelect(match.symbol, match.description)
     } catch {
       setError('Search is temporarily unavailable. Please try again.')
     } finally {
@@ -207,59 +240,58 @@ export default function ResearchSearchPage() {
 
   return (
     <div className="animate-fade-up d1" style={{ padding: '0 0 28px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <div>
+        <div style={{ fontSize: 11, letterSpacing: '0.14em', color: 'var(--gold-dim)', textTransform: 'uppercase', fontWeight: 600 }}>
+          Research
+        </div>
+        <h1 className="font-display text-gold-gradient" style={{ margin: '6px 0 0', fontSize: 42, fontWeight: 500, lineHeight: 1.05 }}>
+          Qualitative Analysis
+        </h1>
+        <p style={{ margin: '10px 0 0', color: 'var(--text-secondary)', fontSize: 14, lineHeight: 1.65, maxWidth: 860 }}>
+          Describe what you want in plain English, and we will resolve the best stock or ETF match before sending you to QA.
+          Use the prompt bar below for idea-driven searches, or the direct search box for ticker and company lookups.
+        </p>
+      </div>
 
-        <div>
+      <div className="card" style={{ padding: '20px 22px 22px' }}>
+        <div
+          className="card-elevated"
+          style={{
+            padding: '18px 18px 16px',
+            border: '1px solid var(--border-bright)',
+            background: 'linear-gradient(180deg, rgba(200,169,110,0.08), rgba(14,17,28,0.92))',
+          }}
+        >
           <div style={{ fontSize: 11, letterSpacing: '0.14em', color: 'var(--gold-dim)', textTransform: 'uppercase', fontWeight: 600 }}>
-            Research
+            Describe What You Want
           </div>
-          <h1 className="font-display text-gold-gradient" style={{ margin: '6px 0 0', fontSize: 42, fontWeight: 500, lineHeight: 1.05 }}>
-            Qualitative Analysis
-          </h1>
-          <p style={{ margin: '10px 0 0', color: 'var(--text-secondary)', fontSize: 14, lineHeight: 1.65, maxWidth: 860 }}>
-            Describe what you want in plain English, and we will resolve the best stock or ETF match before sending you to QA.
-            Use the prompt bar below for idea-driven searches, or the direct search box for ticker and company lookups.
-          </p>
-        </div>
-
-        <div className="card" style={{ padding: '20px 22px 22px' }}>
-          <div
-            className="card-elevated"
-            style={{
-              padding: '18px 18px 16px',
-              border: '1px solid var(--border-bright)',
-              background: 'linear-gradient(180deg, rgba(200,169,110,0.08), rgba(14,17,28,0.92))',
-            }}
-          >
-            <div style={{ fontSize: 11, letterSpacing: '0.14em', color: 'var(--gold-dim)', textTransform: 'uppercase', fontWeight: 600 }}>
-              Describe What You Want
-            </div>
-            <div style={{ marginTop: 8, color: 'var(--text-secondary)', fontSize: 13.5, lineHeight: 1.6 }}>
-              Examples: medtech innovators, ageing-population healthcare beneficiaries, AI infrastructure leaders, or defensive income compounders.
-            </div>
-            <form onSubmit={handleIntentSearch} style={{ display: 'flex', gap: 10, alignItems: 'stretch', marginTop: 14 }}>
-              <input
-                className="input-dark"
-                value={intentQuery}
-                onChange={(e) => setIntentQuery(e.target.value)}
-                placeholder="Describe what you want..."
-                autoComplete="off"
-                aria-label="Describe what you want"
-              />
-              <button
-                type="submit"
-                disabled={!canIntentSearch}
-                className="btn-gold"
-                style={{ minWidth: 132, opacity: canIntentSearch ? 1 : 0.6, cursor: canIntentSearch ? 'pointer' : 'not-allowed' }}
-              >
-                {intentLoading ? 'Loading...' : 'Find matches'}
-              </button>
-            </form>
+          <div style={{ marginTop: 8, color: 'var(--text-secondary)', fontSize: 13.5, lineHeight: 1.6 }}>
+            Examples: medtech innovators, ageing-population healthcare beneficiaries, AI infrastructure leaders, or defensive income compounders.
           </div>
+          <form onSubmit={handleIntentSearch} style={{ display: 'flex', gap: 10, alignItems: 'stretch', marginTop: 14 }}>
+            <input
+              className="input-dark"
+              value={intentQuery}
+              onChange={(e) => setIntentQuery(e.target.value)}
+              placeholder="Describe what you want..."
+              autoComplete="off"
+              aria-label="Describe what you want"
+            />
+            <button
+              type="submit"
+              disabled={!canIntentSearch}
+              className="btn-gold"
+              style={{ minWidth: 132, opacity: canIntentSearch ? 1 : 0.6, cursor: canIntentSearch ? 'pointer' : 'not-allowed' }}
+            >
+              {intentLoading ? 'Loading...' : 'Find matches'}
+            </button>
+          </form>
         </div>
+      </div>
 
-        <div className="card" style={{ padding: '18px 22px 20px' }}>
-          <form onSubmit={handleSearch} style={{ display: 'flex', gap: 10, alignItems: 'stretch' }}>
-            <div ref={wrapRef} style={{ flex: 1, position: 'relative' }}>
+      <div className="card" style={{ padding: '18px 22px 20px' }}>
+        <form onSubmit={handleSearch} style={{ display: 'flex', gap: 10, alignItems: 'stretch' }}>
+          <div ref={wrapRef} style={{ flex: 1, position: 'relative' }}>
             <span
               style={{
                 position: 'absolute',
@@ -274,117 +306,162 @@ export default function ResearchSearchPage() {
             >
               ⌕
             </span>
-              <input
-                className="input-dark"
-                style={{ paddingLeft: 36, minHeight: 42 }}
-                value={query}
-                onChange={(e) => handleQueryChange(e.target.value)}
-                onFocus={() => { if (results.length > 0) setOpen(true) }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Escape') {
-                    setOpen(false)
-                    setQuery('')
-                  }
+            <input
+              className="input-dark"
+              style={{ paddingLeft: 36, minHeight: 42 }}
+              value={query}
+              onChange={(e) => handleQueryChange(e.target.value)}
+              onFocus={() => {
+                if (query.trim() && results.length > 0) setOpen(true)
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  setOpen(false)
+                  setQuery('')
+                }
+              }}
+              placeholder="Search ticker or company directly..."
+              autoComplete="off"
+              aria-label="Search ticker or company"
+            />
+            {open && results.length > 0 && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 'calc(100% + 6px)',
+                  left: 0,
+                  right: 0,
+                  zIndex: 50,
+                  background: 'var(--bg-surface)',
+                  border: '1px solid var(--border-bright)',
+                  borderRadius: 10,
+                  overflow: 'hidden',
+                  boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
                 }}
-                placeholder="Search ticker or company directly..."
-                autoComplete="off"
-                aria-label="Search ticker or company"
-              />
-              {open && results.length > 0 && (
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: 'calc(100% + 6px)',
-                    left: 0,
-                    right: 0,
-                    zIndex: 50,
-                    background: 'var(--bg-surface)',
-                    border: '1px solid var(--border-bright)',
-                    borderRadius: 10,
-                    overflow: 'hidden',
-                    boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
-                  }}
-                >
-                  {results.map((r, i) => (
-                    <button
-                      key={r.symbol}
-                      type="button"
-                      onClick={() => handleSelect(r.symbol)}
-                      style={{
-                        width: '100%',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '10px 16px',
-                        background: 'none',
-                        border: 'none',
-                        cursor: 'pointer',
-                        borderBottom: i < results.length - 1 ? '1px solid var(--border)' : 'none',
-                        fontFamily: "'DM Sans', sans-serif",
-                        transition: 'background 0.1s',
-                      }}
-                      onMouseEnter={(event) => { event.currentTarget.style.background = 'var(--bg-elevated)' }}
-                      onMouseLeave={(event) => { event.currentTarget.style.background = 'none' }}
-                    >
-                      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--gold)', letterSpacing: '0.03em', minWidth: 56, textAlign: 'left' }}>
-                        {r.symbol}
-                      </span>
-                      <span style={{ fontSize: 12.5, color: 'var(--text-secondary)', flex: 1, textAlign: 'left', paddingLeft: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {r.description}
-                      </span>
-                      <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 8 }}>↗</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-            <button
-              type="submit"
-              disabled={!canSearch}
-              className="btn-gold"
-              style={{ minWidth: 108, opacity: canSearch ? 1 : 0.6, cursor: canSearch ? 'pointer' : 'not-allowed' }}
-            >
-              {loading || searching ? 'Running...' : 'Run QA'}
-            </button>
-            <button
-              type="button"
-              className="btn-ghost"
-              style={{ minWidth: 92 }}
-              onClick={() => router.push('/protected/explore')}
-            >
-              Explore
-            </button>
-          </form>
+              >
+                {results.map((r, i) => (
+                  <button
+                    key={`${r.symbol}-${i}`}
+                    type="button"
+                    onClick={() => handleSelect(r.symbol, r.description)}
+                    style={{
+                      width: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '10px 16px',
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      borderBottom: i < results.length - 1 ? '1px solid var(--border)' : 'none',
+                      fontFamily: "'DM Sans', sans-serif",
+                      transition: 'background 0.1s',
+                    }}
+                    onMouseEnter={(event) => { event.currentTarget.style.background = 'var(--bg-elevated)' }}
+                    onMouseLeave={(event) => { event.currentTarget.style.background = 'none' }}
+                  >
+                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--gold)', letterSpacing: '0.03em', minWidth: 56, textAlign: 'left' }}>
+                      {r.symbol}
+                    </span>
+                    <span style={{ fontSize: 12.5, color: 'var(--text-secondary)', flex: 1, textAlign: 'left', paddingLeft: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {r.description}
+                    </span>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 8 }}>Open</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <button
+            type="submit"
+            disabled={!canSearch}
+            className="btn-gold"
+            style={{ minWidth: 108, opacity: canSearch ? 1 : 0.6, cursor: canSearch ? 'pointer' : 'not-allowed' }}
+          >
+            {loading || searching ? 'Opening...' : 'Open analysis'}
+          </button>
+          <button
+            type="button"
+            className="btn-ghost"
+            style={{ minWidth: 92 }}
+            onClick={() => router.push('/protected/explore')}
+          >
+            Explore
+          </button>
+        </form>
 
-          {quickExploreSymbols.length > 0 && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
-              {quickExploreSymbols.map((symbol) => (
-                <button
-                  key={symbol}
-                  type="button"
-                  className="btn-ghost"
-                  onClick={() => {
-                    setQuery(symbol)
-                    void handleQuickSearch(symbol)
+        {quickExploreSymbols.length > 0 && (
+          <div style={{ marginTop: 12 }}>
+            <div style={{ fontSize: 10.5, color: 'var(--text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 8 }}>
+              Saved tickers
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {savedTickers.map((item) => (
+                <div
+                  key={item.symbol}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    padding: '4px 4px 4px 10px',
+                    border: '1px solid var(--border)',
+                    borderRadius: 8,
+                    background: 'var(--bg-elevated)',
                   }}
-                  style={{ padding: '6px 11px', borderRadius: 7, fontSize: 12 }}
                 >
-                  {symbol}
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setQuery(item.symbol)
+                      void handleQuickSearch(item.symbol)
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--text-primary)',
+                      cursor: 'pointer',
+                      fontSize: 12,
+                      fontFamily: "'DM Sans', sans-serif",
+                      padding: 0,
+                    }}
+                    title={item.companyName ?? item.symbol}
+                  >
+                    {item.symbol}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleRemoveSavedTicker(item.symbol)}
+                    style={{
+                      width: 22,
+                      height: 22,
+                      borderRadius: 6,
+                      border: 'none',
+                      background: 'transparent',
+                      color: 'var(--text-muted)',
+                      cursor: 'pointer',
+                      fontSize: 12,
+                      fontFamily: "'DM Sans', sans-serif",
+                    }}
+                    title={`Remove ${item.symbol}`}
+                  >
+                    x
+                  </button>
+                </div>
               ))}
             </div>
-          )}
+          </div>
+        )}
 
-          <p style={{ marginTop: 10, color: 'var(--text-muted)', fontSize: 12.5 }}>
-            Try prompts like JPMorgan, largest US bank, or financial sector ETF. Press Enter to use the best match.
+        <p style={{ marginTop: 10, color: 'var(--text-muted)', fontSize: 12.5 }}>
+          Search a ticker or company name directly. Choose a result from the list or press Enter to open the strongest match.
+        </p>
+
+        {error && (
+          <p style={{ marginTop: 10, marginBottom: 0, color: 'var(--red)', fontSize: 13 }}>
+            {error}
           </p>
-
-          {error && (
-            <p style={{ marginTop: 10, marginBottom: 0, color: 'var(--red)', fontSize: 13 }}>
-              {error}
-            </p>
-          )}
-        </div>
+        )}
+      </div>
     </div>
   )
 }

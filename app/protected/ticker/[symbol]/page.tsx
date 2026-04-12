@@ -156,7 +156,7 @@ const heuristics = data ? getCrisisHeuristics(data, companyKeyVulnerabilities, c
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg-base)' }}>
         <header style={{ padding: '28px 36px 16px', borderBottom: '1px solid var(--border)', background: 'var(--bg-surface)' }}>
-          <button className="btn-ghost" onClick={() => router.back()} style={{ fontSize: 12, padding: '6px 14px', marginBottom: 20, display: 'inline-flex', alignItems: 'center', gap: 6 }}>← Back</button>
+          <button className="btn-ghost" onClick={() => router.back()} style={{ fontSize: 12, padding: '6px 14px', marginBottom: 20, display: 'inline-flex', alignItems: 'center', gap: 6 }}>Back</button>
 
           {loading ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
@@ -189,7 +189,7 @@ const heuristics = data ? getCrisisHeuristics(data, companyKeyVulnerabilities, c
                   ${fmt(data.price)}
                 </div>
                 <div style={{ fontSize: 14, color: metricColorForValue(data.priceChangePct ?? undefined), marginTop: 6, fontWeight: 500 }}>
-                  {data.priceChange == null ? '—' : `${data.priceChange > 0 ? '+' : data.priceChange < 0 ? '-' : ''}${fmt(Math.abs(data.priceChange))}`} ({formatSignedPercent((data.priceChangePct ?? 0) / 100)})
+                  {data.priceChange == null ? '--' : `${data.priceChange > 0 ? '+' : data.priceChange < 0 ? '-' : ''}${fmt(Math.abs(data.priceChange))}`} ({formatSignedPercent((data.priceChangePct ?? 0) / 100)})
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>Mkt Cap {fmtMarketCap(data.marketCap)}</div>
               </div>
@@ -205,7 +205,7 @@ const heuristics = data ? getCrisisHeuristics(data, companyKeyVulnerabilities, c
                   onClick={() => setTab(t)}
                   style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", padding: '8px 20px', textTransform: 'capitalize' }}
                 >
-                  {t === 'analysis' ? '✦ Analysis' : t}
+                  {t === 'analysis' ? 'Analysis' : t}
                 </button>
               ))}
             </div>
@@ -223,14 +223,14 @@ const heuristics = data ? getCrisisHeuristics(data, companyKeyVulnerabilities, c
 
           {!loading && error && (
             <div className="card" style={{ padding: '40px', textAlign: 'center', maxWidth: 480, margin: '60px auto' }}>
-              <div style={{ fontSize: 32, marginBottom: 16 }}>⚠</div>
+              <div style={{ fontSize: 32, marginBottom: 16 }}>!</div>
               <div style={{ fontSize: 16, color: 'var(--text-primary)', marginBottom: 8 }}>Could not load data</div>
               <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 24 }}>{error}</div>
-              <button className="btn-ghost" onClick={() => router.back()} style={{ padding: '10px 24px' }}>← Go back</button>
+              <button className="btn-ghost" onClick={() => router.back()} style={{ padding: '10px 24px' }}>Go back</button>
             </div>
           )}
 
-          {/* ── OVERVIEW TAB ── */}
+          {/* OVERVIEW TAB */}
           {!loading && !error && data && tab === 'overview' && (
             <div className="animate-fade-up" style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
 
@@ -332,7 +332,7 @@ const heuristics = data ? getCrisisHeuristics(data, companyKeyVulnerabilities, c
                 <MetricCard label="Market Cap" value={fmtMarketCap(data.marketCap)} sub={data.exchange} />
                 <MetricCard
                   label="52-Week Range"
-                  value={`$${fmt(data.week52Low ?? data.dayLow, 0)} – $${fmt(data.week52High ?? data.dayHigh, 0)}`}
+                  value={`$${fmt(data.week52Low ?? data.dayLow, 0)} - $${fmt(data.week52High ?? data.dayHigh, 0)}`}
                   sub="Low / High"
                 />
                 <MetricCard
@@ -373,7 +373,7 @@ const heuristics = data ? getCrisisHeuristics(data, companyKeyVulnerabilities, c
                   <FinRow label="Revenue Growth (YoY)" value={fmt(data.revenueGrowth, 1, '%')} good={(data.revenueGrowth ?? 0) > 10} bad={(data.revenueGrowth ?? 0) < 0} />
                   <FinRow label="Gross Margin" value={fmt(data.grossMargin, 1, '%')} good={(data.grossMargin ?? 0) > 40} bad={(data.grossMargin ?? 0) < 10} />
                   <FinRow label="Debt / Equity" value={fmt(data.debtEquity, 2, 'x')} good={(data.debtEquity ?? 99) < 0.5} bad={(data.debtEquity ?? 0) > 2} />
-                  <FinRow label="Dividend Yield" value={data.dividendYield ? `${fmt(data.dividendYield, 2)}%` : '—'} />
+                  <FinRow label="Dividend Yield" value={data.dividendYield ? `${fmt(data.dividendYield, 2)}%` : '--'} />
                 </div>
               </div>
 
@@ -495,14 +495,14 @@ const heuristics = data ? getCrisisHeuristics(data, companyKeyVulnerabilities, c
             </div>
           )}
 
-          {/* ── FINANCIALS TAB ── */}
+          {/* FINANCIALS TAB */}
           {!loading && !error && data && tab === 'financials' && (
             <div className="animate-fade-up" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
               {financialsLoading && (
                 <div className="card" style={{ padding: '28px', display: 'flex', alignItems: 'center', gap: 14 }}>
                   <div style={{ width: 20, height: 20, border: '2px solid var(--gold-dim)', borderTopColor: 'var(--gold)', borderRadius: '50%', animation: 'spin 0.8s linear infinite', flexShrink: 0 }} />
-                  <div style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 500 }}>Loading financial statements…</div>
+                  <div style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 500 }}>Loading financial statements...</div>
                 </div>
               )}
 
@@ -517,12 +517,12 @@ const heuristics = data ? getCrisisHeuristics(data, companyKeyVulnerabilities, c
                 const em = financials.extendedMetrics
 
                 function fmtVal(n: number | null, suffix = ''): string {
-                  if (n == null) return '—'
+                  if (n == null) return '--'
                   return n.toFixed(suffix === '%' ? 1 : 2) + suffix
                 }
 
                 function fmtStmt(n: number | null): string {
-                  if (n == null) return '—'
+                  if (n == null) return '--'
                   const abs = Math.abs(n)
                   const sign = n < 0 ? '-' : ''
                   if (abs >= 1_000_000_000) return `${sign}$${(abs / 1_000_000_000).toFixed(2)}B`
@@ -630,7 +630,7 @@ const heuristics = data ? getCrisisHeuristics(data, companyKeyVulnerabilities, c
                         )}
                       </div>
 
-                    {/* ── Income Statement: Margins chart ── */}
+                    {/* Income Statement: Margins chart */}
                     {financials.years.length > 0 && stmtTab === 'income' && (() => {
                       const revRow = financials.annualIncome.find(r => r.concept === 'revenue')
                       const gpRow  = financials.annualIncome.find(r => r.concept === 'grossProfit')
@@ -693,7 +693,7 @@ const heuristics = data ? getCrisisHeuristics(data, companyKeyVulnerabilities, c
                                   <span style={{ width: 10, height: 10, borderRadius: 2, background: color, display: 'inline-block', flexShrink: 0 }} />
                                   <span style={{ fontSize: 12, color: 'var(--text-secondary)', flex: 1, minWidth: 130 }}>{label}</span>
                                   <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>
-                                    {val != null ? `${val.toFixed(1)}%` : '—'}
+                                    {val != null ? `${val.toFixed(1)}%` : '--'}
                                   </span>
                                 </div>
                               ))}
@@ -759,7 +759,7 @@ const heuristics = data ? getCrisisHeuristics(data, companyKeyVulnerabilities, c
             </div>
           )}
 
-          {/* ── NEWS TAB ── */}
+          {/* NEWS TAB */}
           {!loading && !error && data && tab === 'news' && (
             <div className="animate-fade-up" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {data.news.length === 0 ? (
@@ -794,7 +794,7 @@ const heuristics = data ? getCrisisHeuristics(data, companyKeyVulnerabilities, c
                           <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{fmtDate(item.datetime)}</span>
                         </div>
                       </div>
-                      <span style={{ fontSize: 16, color: 'var(--text-muted)', flexShrink: 0, marginTop: 2 }}>↗</span>
+                      <span style={{ fontSize: 16, color: 'var(--text-muted)', flexShrink: 0, marginTop: 2 }}>Read article -&gt;</span>
                     </div>
                   </div>
                 </a>
@@ -802,7 +802,7 @@ const heuristics = data ? getCrisisHeuristics(data, companyKeyVulnerabilities, c
             </div>
           )}
 
-          {/* ── ANALYSIS TAB ── */}
+          {/* ANALYSIS TAB */}
           {!loading && !error && data && tab === 'analysis' && (
             <div className="animate-fade-up" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
@@ -812,7 +812,7 @@ const heuristics = data ? getCrisisHeuristics(data, companyKeyVulnerabilities, c
                   <div className="card" style={{ padding: '28px', display: 'flex', alignItems: 'center', gap: 14 }}>
                     <div style={{ width: 20, height: 20, border: '2px solid var(--gold-dim)', borderTopColor: 'var(--gold)', borderRadius: '50%', animation: 'spin 0.8s linear infinite', flexShrink: 0 }} />
                     <div>
-                      <div style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 500 }}>Analysing {data.name}…</div>
+                      <div style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 500 }}>Analysing {data.name}...</div>
                       <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 3 }}>Reading SEC filing, financial metrics, and recent news</div>
                     </div>
                   </div>
@@ -868,22 +868,22 @@ const heuristics = data ? getCrisisHeuristics(data, companyKeyVulnerabilities, c
                     {/* Bull / Bear */}
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                       <div className="card" style={{ padding: '22px 24px' }}>
-                        <div style={{ fontSize: 10.5, color: 'var(--green)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 14, fontWeight: 600 }}>▲ Bull Thesis</div>
+                        <div style={{ fontSize: 10.5, color: 'var(--green)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 14, fontWeight: 600 }}>Bull Thesis</div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                           {a.bullThesis?.map((pt, i) => (
                             <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                              <span style={{ color: 'var(--green)', fontSize: 12, marginTop: 2, flexShrink: 0 }}>✓</span>
+                              <span style={{ color: 'var(--green)', fontSize: 12, marginTop: 2, flexShrink: 0 }}>+</span>
                               <span style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.55 }}>{pt}</span>
                             </div>
                           ))}
                         </div>
                       </div>
                       <div className="card" style={{ padding: '22px 24px' }}>
-                        <div style={{ fontSize: 10.5, color: 'var(--red)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 14, fontWeight: 600 }}>▼ Bear Thesis</div>
+                        <div style={{ fontSize: 10.5, color: 'var(--red)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 14, fontWeight: 600 }}>Bear Thesis</div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                           {a.bearThesis?.map((pt, i) => (
                             <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                              <span style={{ color: 'var(--red)', fontSize: 12, marginTop: 2, flexShrink: 0 }}>✗</span>
+                              <span style={{ color: 'var(--red)', fontSize: 12, marginTop: 2, flexShrink: 0 }}>-</span>
                               <span style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.55 }}>{pt}</span>
                             </div>
                           ))}
@@ -897,7 +897,7 @@ const heuristics = data ? getCrisisHeuristics(data, companyKeyVulnerabilities, c
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                         {a.keyRisks?.map((r, i) => (
                           <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', paddingBottom: 10, borderBottom: i < a.keyRisks.length - 1 ? '1px solid var(--border)' : 'none' }}>
-                            <span style={{ color: 'var(--gold-dim)', fontSize: 11, marginTop: 2, flexShrink: 0 }}>⚠</span>
+                            <span style={{ color: 'var(--gold-dim)', fontSize: 11, marginTop: 2, flexShrink: 0 }}>!</span>
                             <span style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.55 }}>{r}</span>
                           </div>
                         ))}
@@ -912,7 +912,7 @@ const heuristics = data ? getCrisisHeuristics(data, companyKeyVulnerabilities, c
 
                     <div style={{ padding: '12px 16px', background: 'var(--bg-elevated)', borderRadius: 8, border: '1px solid var(--border)' }}>
                       <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                        ✦ AI analysis generated by GPT-5.4-mini using SEC filings, financial metrics, and recent news. Not financial advice.
+                        AI analysis generated by GPT-5.4-mini using SEC filings, financial metrics, and recent news. Not financial advice.
                       </span>
                     </div>
                   </>
@@ -921,14 +921,14 @@ const heuristics = data ? getCrisisHeuristics(data, companyKeyVulnerabilities, c
             </div>
           )}
 
-          {/* ── THESIS TAB ── */}
+          {/* THESIS TAB */}
           {!loading && !error && data && tab === 'thesis' && (
             <div className="animate-fade-up" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
               {thesisLoading && (
                 <div className="card" style={{ padding: '28px', display: 'flex', alignItems: 'center', gap: 14 }}>
                   <div style={{ width: 20, height: 20, border: '2px solid var(--gold-dim)', borderTopColor: 'var(--gold)', borderRadius: '50%', animation: 'spin 0.8s linear infinite', flexShrink: 0 }} />
-                  <div style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 500 }}>Loading your thesis…</div>
+                  <div style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 500 }}>Loading your thesis...</div>
                 </div>
               )}
 
@@ -937,11 +937,11 @@ const heuristics = data ? getCrisisHeuristics(data, companyKeyVulnerabilities, c
                   {/* Bull / Bear side by side */}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                     <div className="card" style={{ padding: '22px 24px' }}>
-                      <div style={{ fontSize: 10.5, color: 'var(--green)', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600, marginBottom: 12 }}>▲ Bull Case</div>
+                      <div style={{ fontSize: 10.5, color: 'var(--green)', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600, marginBottom: 12 }}>Bull Case</div>
                       <textarea
                         value={thesis.bullCase}
                         onChange={e => setThesis(prev => ({ ...prev, bullCase: e.target.value }))}
-                        placeholder="Why this company will outperform…"
+                        placeholder="Why this company will outperform..."
                         style={{
                           width: '100%', minHeight: 160, background: 'var(--bg-elevated)',
                           border: '1px solid var(--border)', borderRadius: 8, padding: '12px 14px',
@@ -954,11 +954,11 @@ const heuristics = data ? getCrisisHeuristics(data, companyKeyVulnerabilities, c
                       />
                     </div>
                     <div className="card" style={{ padding: '22px 24px' }}>
-                      <div style={{ fontSize: 10.5, color: 'var(--red)', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600, marginBottom: 12 }}>▼ Bear Case</div>
+                      <div style={{ fontSize: 10.5, color: 'var(--red)', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600, marginBottom: 12 }}>Bear Case</div>
                       <textarea
                         value={thesis.bearCase}
                         onChange={e => setThesis(prev => ({ ...prev, bearCase: e.target.value }))}
-                        placeholder="Risks and reasons it could disappoint…"
+                        placeholder="Risks and reasons it could disappoint..."
                         style={{
                           width: '100%', minHeight: 160, background: 'var(--bg-elevated)',
                           border: '1px solid var(--border)', borderRadius: 8, padding: '12px 14px',
@@ -978,7 +978,7 @@ const heuristics = data ? getCrisisHeuristics(data, companyKeyVulnerabilities, c
                     <textarea
                       value={thesis.thesis}
                       onChange={e => setThesis(prev => ({ ...prev, thesis: e.target.value }))}
-                      placeholder={`Write your full investment thesis for ${data.name}…`}
+                      placeholder={`Write your full investment thesis for ${data.name}...`}
                       style={{
                         width: '100%', minHeight: 200, background: 'var(--bg-elevated)',
                         border: '1px solid var(--border)', borderRadius: 8, padding: '12px 14px',
@@ -997,11 +997,11 @@ const heuristics = data ? getCrisisHeuristics(data, companyKeyVulnerabilities, c
                       href={`/protected/valuation?symbol=${symbol}&tab=dcf`}
                       style={{ fontSize: 13, color: 'var(--gold)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}
                     >
-                      Open in Valuation ↗
+                      Open in Valuation
                     </a>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                       {thesisSaved && (
-                        <span style={{ fontSize: 12, color: 'var(--green)' }}>Saved ✓</span>
+                        <span style={{ fontSize: 12, color: 'var(--green)' }}>Saved</span>
                       )}
                       <button
                         type="button"
@@ -1010,7 +1010,7 @@ const heuristics = data ? getCrisisHeuristics(data, companyKeyVulnerabilities, c
                         disabled={thesisSaving}
                         style={{ padding: '8px 24px', fontSize: 13, opacity: thesisSaving ? 0.75 : 1, cursor: thesisSaving ? 'default' : 'pointer' }}
                       >
-                        {thesisSaving ? 'Saving…' : 'Save'}
+                        {thesisSaving ? 'Saving...' : 'Save'}
                       </button>
                     </div>
                   </div>

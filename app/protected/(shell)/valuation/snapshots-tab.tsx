@@ -3,8 +3,6 @@
 import { useEffect, useState } from 'react'
 import type { DCFResult } from '@/lib/dcf'
 
-/* ─── TYPES ──────────────────────────────────────────────────────────────── */
-
 export interface DcfSnapshot {
   id: string
   symbol: string
@@ -28,8 +26,6 @@ export interface DcfSnapshot {
   created_at: string
 }
 
-/* ─── HELPERS ────────────────────────────────────────────────────────────── */
-
 function fmtPrice(n: number): string {
   return `$${n.toFixed(2)}`
 }
@@ -45,8 +41,6 @@ function pctDiff(intrinsic: number, market: number): number {
   return ((intrinsic - market) / Math.abs(market)) * 100
 }
 
-/* ─── SNAPSHOT CARD ──────────────────────────────────────────────────────── */
-
 function SnapshotCard({ snap, onDelete, deleting, showSymbol }: {
   snap: DcfSnapshot
   onDelete: (id: string) => void
@@ -55,13 +49,12 @@ function SnapshotCard({ snap, onDelete, deleting, showSymbol }: {
 }) {
   const scenarios = [
     { label: 'Conservative', result: snap.results_json.conservative, color: '#F06070' },
-    { label: 'Neutral',      result: snap.results_json.neutral,      color: 'var(--gold)' },
-    { label: 'Bullish',      result: snap.results_json.bullish,      color: '#3DD68C' },
+    { label: 'Neutral', result: snap.results_json.neutral, color: 'var(--gold)' },
+    { label: 'Bullish', result: snap.results_json.bullish, color: '#3DD68C' },
   ] as const
 
   return (
     <div className="card" style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           {showSymbol && (
@@ -82,11 +75,10 @@ function SnapshotCard({ snap, onDelete, deleting, showSymbol }: {
             fontFamily: "'DM Sans', sans-serif", opacity: deleting ? 0.5 : 1, transition: 'opacity 0.15s',
           }}
         >
-          {deleting ? 'Deleting…' : 'Delete'}
+          {deleting ? 'Deleting...' : 'Delete'}
         </button>
       </div>
 
-      {/* Assumptions pill row */}
       <div style={{
         display: 'flex', flexWrap: 'wrap', gap: '6px 16px', padding: '10px 12px',
         background: 'var(--bg-elevated)', borderRadius: 7, fontSize: 11.5, color: 'var(--text-secondary)',
@@ -107,7 +99,6 @@ function SnapshotCard({ snap, onDelete, deleting, showSymbol }: {
         )}
       </div>
 
-      {/* Scenario intrinsic values */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
         {scenarios.map(({ label, result, color }) => {
           const diff = snap.market_price != null ? pctDiff(result.intrinsicPricePerShare, snap.market_price) : null
@@ -119,7 +110,7 @@ function SnapshotCard({ snap, onDelete, deleting, showSymbol }: {
               </div>
               {diff != null && (
                 <div style={{ fontSize: 11, fontWeight: 500, marginTop: 3, color: diff >= 0 ? '#3DD68C' : '#F06070' }}>
-                  {diff >= 0 ? '▲' : '▼'} {Math.abs(diff).toFixed(1)}%
+                  {diff >= 0 ? '+' : '-'} {Math.abs(diff).toFixed(1)}%
                 </div>
               )}
             </div>
@@ -130,8 +121,6 @@ function SnapshotCard({ snap, onDelete, deleting, showSymbol }: {
   )
 }
 
-/* ─── MAIN COMPONENT ─────────────────────────────────────────────────────── */
-
 export function SnapshotsTab({ symbol, refreshKey, onSwitchToDcf }: {
   symbol?: string
   refreshKey: number
@@ -141,17 +130,24 @@ export function SnapshotsTab({ symbol, refreshKey, onSwitchToDcf }: {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set())
+  const [showAllSnapshots, setShowAllSnapshots] = useState(false)
+
+  useEffect(() => {
+    setShowAllSnapshots(false)
+  }, [symbol])
+
+  const filterSymbol = symbol && !showAllSnapshots ? symbol : undefined
 
   useEffect(() => {
     setLoading(true)
     setError(null)
-    const url = symbol ? `/api/dcf-snapshots?symbol=${encodeURIComponent(symbol)}` : '/api/dcf-snapshots'
+    const url = filterSymbol ? `/api/dcf-snapshots?symbol=${encodeURIComponent(filterSymbol)}` : '/api/dcf-snapshots'
     fetch(url)
       .then(r => r.ok ? r.json() : Promise.reject(r.statusText))
       .then((d: { snapshots: DcfSnapshot[] }) => setSnapshots(d.snapshots))
       .catch(e => setError(typeof e === 'string' ? e : 'Failed to load snapshots'))
       .finally(() => setLoading(false))
-  }, [symbol, refreshKey])
+  }, [filterSymbol, refreshKey])
 
   async function handleDelete(id: string) {
     setDeletingIds(s => new Set(s).add(id))
@@ -172,7 +168,7 @@ export function SnapshotsTab({ symbol, refreshKey, onSwitchToDcf }: {
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '64px 0', color: 'var(--text-muted)', fontSize: 13 }}>
-      Loading snapshots…
+      Loading snapshots...
     </div>
   )
 
@@ -182,12 +178,48 @@ export function SnapshotsTab({ symbol, refreshKey, onSwitchToDcf }: {
     </div>
   )
 
+  const contextLabel = filterSymbol
+    ? `Showing ${filterSymbol} snapshots only`
+    : 'Showing all saved snapshots'
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      {/* Action bar */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-          {snapshots.length} Snapshot{snapshots.length !== 1 ? 's' : ''}{symbol ? ` · ${symbol}` : ' · All Stocks'}
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+        <div style={{ display: 'grid', gap: 8 }}>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+            {snapshots.length} Snapshot{snapshots.length !== 1 ? 's' : ''}{filterSymbol ? ` - ${filterSymbol}` : ' - All Stocks'}
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
+            <div style={{ fontSize: 12.5, color: 'var(--text-secondary)' }}>{contextLabel}</div>
+            {symbol && !showAllSnapshots && (
+              <button
+                type="button"
+                onClick={() => setShowAllSnapshots(true)}
+                style={{
+                  fontSize: 11.5, fontWeight: 600, color: 'var(--gold)',
+                  background: 'rgba(200,169,110,0.08)', border: '1px solid rgba(200,169,110,0.25)',
+                  borderRadius: 999, padding: '5px 12px', cursor: 'pointer',
+                  fontFamily: "'DM Sans', sans-serif",
+                }}
+              >
+                Show all snapshots
+              </button>
+            )}
+            {symbol && showAllSnapshots && (
+              <button
+                type="button"
+                onClick={() => setShowAllSnapshots(false)}
+                style={{
+                  fontSize: 11.5, fontWeight: 600, color: 'var(--text-secondary)',
+                  background: 'var(--bg-elevated)', border: '1px solid var(--border)',
+                  borderRadius: 999, padding: '5px 12px', cursor: 'pointer',
+                  fontFamily: "'DM Sans', sans-serif",
+                }}
+              >
+                Back to {symbol}
+              </button>
+            )}
+          </div>
         </div>
         <button
           type="button"
@@ -201,18 +233,28 @@ export function SnapshotsTab({ symbol, refreshKey, onSwitchToDcf }: {
           onMouseEnter={e => { e.currentTarget.style.background = 'rgba(200,169,110,0.18)' }}
           onMouseLeave={e => { e.currentTarget.style.background = 'rgba(200,169,110,0.1)' }}
         >
-          Run Live DCF →
+          Run Live DCF {'->'}
         </button>
       </div>
 
-      {/* Empty state */}
       {snapshots.length === 0 && (
         <div className="card" style={{ padding: '48px 24px', textAlign: 'center' }}>
-          <div style={{ fontSize: 28, opacity: 0.3, marginBottom: 14 }}>⊟</div>
           <div style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 6 }}>No snapshots yet</div>
-          <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 20 }}>
-            Run the DCF and click <strong style={{ color: 'var(--text-secondary)' }}>Save Snapshot</strong> to record your assumptions and results.
+          <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 12 }}>
+            {filterSymbol
+              ? `You have not saved a DCF snapshot for ${filterSymbol} yet.`
+              : 'You have not saved any DCF snapshots yet.'}
           </div>
+          {symbol && !showAllSnapshots && (
+            <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 20 }}>
+              If you saved another company earlier, click <strong style={{ color: 'var(--text-secondary)' }}>Show all snapshots</strong> to see it.
+            </div>
+          )}
+          {!symbol && (
+            <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 20 }}>
+              Run the DCF and click <strong style={{ color: 'var(--text-secondary)' }}>Save Snapshot</strong> to record your assumptions and results.
+            </div>
+          )}
           <button
             type="button"
             onClick={onSwitchToDcf}
@@ -223,14 +265,13 @@ export function SnapshotsTab({ symbol, refreshKey, onSwitchToDcf }: {
               fontFamily: "'DM Sans', sans-serif",
             }}
           >
-            Run Live DCF →
+            Run Live DCF {'->'}
           </button>
         </div>
       )}
 
-      {/* Snapshot list */}
       {snapshots.map(snap => (
-        <SnapshotCard key={snap.id} snap={snap} onDelete={handleDelete} deleting={deletingIds.has(snap.id)} showSymbol={!symbol} />
+        <SnapshotCard key={snap.id} snap={snap} onDelete={handleDelete} deleting={deletingIds.has(snap.id)} showSymbol={!filterSymbol} />
       ))}
     </div>
   )

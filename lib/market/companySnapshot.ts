@@ -29,6 +29,7 @@ export type MergedCompanySnapshot = {
   name: string
   exchange: string | null
   sector: string | null
+  industry: string | null
   country: string | null
   website: string | null
   logo: string | null
@@ -91,7 +92,8 @@ export async function fetchMergedCompanySnapshot(symbol: string, finnhubKey: str
   if (!name) return null
 
   const exchange = takeString(profile.exchange, secMapping?.exchange)
-  const sector = takeString(profile.finnhubIndustry, secMapping?.sector, secMapping?.sicSector, secMapping?.industry)
+  const industry = takeString(profile.finnhubIndustry, secMapping?.industry, secMapping?.sicSector)
+  const sector = takeString(secMapping?.sector, secMapping?.sicSector, industry)
   const country = takeString(profile.country, deriveCountryFromLocation(takeString(secMapping?.location)))
   const warnings: string[] = []
 
@@ -104,6 +106,7 @@ export async function fetchMergedCompanySnapshot(symbol: string, finnhubKey: str
     name,
     exchange,
     sector,
+    industry,
     country,
     website: takeString(profile.weburl),
     logo: takeString(profile.logo),

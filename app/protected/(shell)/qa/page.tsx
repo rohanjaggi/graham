@@ -1,10 +1,10 @@
-'use client'
+﻿'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import type { ScreenerRow, ScreenerFilters } from '@/app/api/screener/route'
 
-// ─── Ticker redirect helpers (preserved from original) ─────────────────────
+// â”€â”€â”€ Ticker redirect helpers (preserved from original) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const DEFAULT_SYMBOL = 'AAPL'
 const TICKER_PATTERN = /^[A-Z][A-Z0-9.-]{0,9}$/
 type SearchResult = { symbol: string; description: string }
@@ -27,7 +27,7 @@ async function resolveSymbol(raw: string): Promise<string> {
   return normalized[0]?.symbol?.toUpperCase() ?? DEFAULT_SYMBOL
 }
 
-// ─── Types ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 type UIFilters = {
   peMax: number | null
   pbMax: number | null
@@ -77,7 +77,7 @@ const SECTORS = [
   'Utilities', 'Real Estate', 'Consumer Cyclical',
 ]
 
-// ─── Color helper ──────────────────────────────────────────────────────────
+// â”€â”€â”€ Color helper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 type ColorMetric = 'roe' | 'roic' | 'grossMargin' | 'netMargin' | 'operatingMargin' |
   'debtEquity' | 'revenueGrowth' | 'epsGrowth' | 'pe' | 'ytdReturn' | 'sharesChangeYoy'
 
@@ -99,21 +99,21 @@ function metricColor(key: ColorMetric, value: number | null): string {
   }
 }
 
-// ─── Format helpers ────────────────────────────────────────────────────────
+// â”€â”€â”€ Format helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function fmtPrice(v: number | null) {
-  if (v == null) return '—'
+  if (v == null) return '--'
   return `$${v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 function fmtCap(v: number | null) {
-  if (v == null) return '—'
+  if (v == null) return '--'
   if (v >= 1e12) return `$${(v / 1e12).toFixed(2)}T`
   if (v >= 1e9)  return `$${(v / 1e9).toFixed(1)}B`
   return `$${(v / 1e6).toFixed(0)}M`
 }
-function fmtNum(v: number | null, d = 1) { return v == null ? '—' : v.toFixed(d) }
-function fmtPct(v: number | null, d = 1) { return v == null ? '—' : `${v.toFixed(d)}%` }
+function fmtNum(v: number | null, d = 1) { return v == null ? '--' : v.toFixed(d) }
+function fmtPct(v: number | null, d = 1) { return v == null ? '--' : `${v.toFixed(d)}%` }
 
-// ─── Filter input ──────────────────────────────────────────────────────────
+// â”€â”€â”€ Filter input â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function FilterInput({ label, value, onChange, placeholder, width = 110 }: {
   label: string; value: number | null; onChange: (v: number | null) => void
   placeholder: string; width?: number
@@ -130,7 +130,7 @@ function FilterInput({ label, value, onChange, placeholder, width = 110 }: {
   )
 }
 
-// ─── Column definitions ────────────────────────────────────────────────────
+// â”€â”€â”€ Column definitions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 type Col = {
   key: keyof ScreenerRow; label: string; align: 'left' | 'right'
   fmt: (r: ScreenerRow) => string; color?: (r: ScreenerRow) => string
@@ -158,11 +158,11 @@ const COLUMNS: Col[] = [
   { key: 'dividendYield', label: 'Yield',      align: 'right', fmt: r => fmtPct(r.dividendYield, 2) },
   { key: 'ytdReturn',     label: 'YTD',        align: 'right', fmt: r => fmtPct(r.ytdReturn),
     color: r => metricColor('ytdReturn', r.ytdReturn) },
-  { key: 'sharesChangeYoy', label: 'Shr Δ YoY', align: 'right', fmt: r => fmtPct(r.sharesChangeYoy),
+  { key: 'sharesChangeYoy', label: 'Shr Chg YoY', align: 'right', fmt: r => fmtPct(r.sharesChangeYoy),
     color: r => metricColor('sharesChangeYoy', r.sharesChangeYoy) },
 ]
 
-// ─── Skeleton row ──────────────────────────────────────────────────────────
+// â”€â”€â”€ Skeleton row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function SkeletonRow() {
   return (
     <tr>
@@ -180,8 +180,24 @@ function SkeletonRow() {
   )
 }
 
-// ─── Main page ─────────────────────────────────────────────────────────────
+// â”€â”€â”€ Main page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function ScreenerPageFallback() {
+  return (
+    <div style={{ padding: '36px 32px', color: 'var(--text-muted)', fontSize: 13 }}>
+      Loading screener...
+    </div>
+  )
+}
+
 export default function ScreenerPage() {
+  return (
+    <Suspense fallback={<ScreenerPageFallback />}>
+      <ScreenerPageContent />
+    </Suspense>
+  )
+}
+
+function ScreenerPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const rawTicker = searchParams.get('ticker')?.trim() ?? ''
@@ -202,7 +218,7 @@ export default function ScreenerPage() {
   const [savingPreset, setSavingPreset] = useState(false)
   const saveInputRef = useRef<HTMLInputElement>(null)
 
-  // Redirect branch — preserved behaviour
+  // Redirect branch â€” preserved behaviour
   useEffect(() => {
     if (!rawTicker) return
     let cancelled = false
@@ -345,7 +361,7 @@ export default function ScreenerPage() {
           <div style={{ fontSize: 11, letterSpacing: '0.14em', color: 'var(--gold-dim)', textTransform: 'uppercase', fontWeight: 600 }}>Screener</div>
           <h1 className="font-display text-gold-gradient" style={{ margin: '6px 0 0', fontSize: 42, fontWeight: 500, lineHeight: 1.05 }}>Stock Screener</h1>
           <p style={{ margin: '10px 0 0', color: 'var(--text-secondary)', fontSize: 14, lineHeight: 1.65, maxWidth: 860 }}>
-            Warren Buffett–style quality filters across US-listed equities.
+            Warren Buffett-style quality filters across US-listed equities.
           </p>
         </div>
 
@@ -371,13 +387,13 @@ export default function ScreenerPage() {
               <button type="button"
                 onClick={() => void handleDeletePreset(p.id)}
                 style={{ fontSize: 12, color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: '0 4px', lineHeight: 1 }}
-                title="Delete preset">×</button>
+                title="Delete preset">x</button>
             </div>
           ))}
 
           {showSaveInput ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <input ref={saveInputRef} className="input-dark" placeholder="Preset name…"
+              <input ref={saveInputRef} className="input-dark" placeholder="Preset name..."
                 value={savePresetName}
                 onChange={e => setSavePresetName(e.target.value)}
                 onKeyDown={e => {
@@ -389,7 +405,7 @@ export default function ScreenerPage() {
                 onClick={() => void handleSavePreset()}
                 disabled={savingPreset || !savePresetName.trim()}
                 style={{ fontSize: 12, padding: '5px 12px' }}>
-                {savingPreset ? '…' : 'Save'}
+                {savingPreset ? '...' : 'Save'}
               </button>
               <button type="button"
                 onClick={() => { setShowSaveInput(false); setSavePresetName('') }}
@@ -499,7 +515,7 @@ export default function ScreenerPage() {
               <div style={dividerStyle} />
               <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'flex-start' }}>
                 <span style={labelStyle}>52-wk Range</span>
-                <FilterInput label="Max % below 52-wk High" value={filters.pctFrom52wHighMax} onChange={v => setFilter('pctFrom52wHighMax', v)} placeholder="e.g. −30" width={150} />
+                <FilterInput label="Max % below 52-wk High" value={filters.pctFrom52wHighMax} onChange={v => setFilter('pctFrom52wHighMax', v)} placeholder="e.g. -30" width={150} />
                 <FilterInput label="Min % above 52-wk Low" value={filters.pctFrom52wLowMin} onChange={v => setFilter('pctFrom52wLowMin', v)} placeholder="e.g. 5" width={150} />
               </div>
               <div style={dividerStyle} />
@@ -517,7 +533,7 @@ export default function ScreenerPage() {
             onClick={() => void runScreener(filters, 0)}
             disabled={loading}
             style={{ minWidth: 130, fontSize: 14 }}>
-            {loading ? 'Screening…' : '⊟ Screen'}
+            {loading ? 'Screening...' : 'Run screen'}
           </button>
         </div>
 
@@ -604,7 +620,7 @@ export default function ScreenerPage() {
         {/* Empty state */}
         {!loading && !hasSearched && !error && (
           <div style={{ textAlign: 'center', padding: '64px 20px', color: 'var(--text-muted)' }}>
-            <div style={{ fontSize: 36, marginBottom: 16, opacity: 0.35 }}>⊟</div>
+            <div style={{ fontSize: 36, marginBottom: 16, opacity: 0.35 }}>⌕</div>
             <div style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 6 }}>
               Apply filters and click Screen
             </div>
@@ -628,7 +644,7 @@ export default function ScreenerPage() {
               onClick={() => void runScreener(filters, rows.length, true)}
               disabled={loadingMore}
               style={{ fontSize: 13, minWidth: 180 }}>
-              {loadingMore ? 'Loading…' : `Load more (${(total - rows.length).toLocaleString()} remaining)`}
+              {loadingMore ? 'Loading...' : `Load more (${(total - rows.length).toLocaleString()} remaining)`}
             </button>
           </div>
         )}
@@ -637,3 +653,4 @@ export default function ScreenerPage() {
     </>
   )
 }
+

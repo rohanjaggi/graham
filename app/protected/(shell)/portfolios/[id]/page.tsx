@@ -5,6 +5,16 @@ import { useEffect, useState } from 'react'
 import { formatDownsidePercent, formatPercent, formatSignedPercent, metricColorForValue } from '@/lib/ui/metricFormat'
 
 type StressScenario = { assumed_shock: number; estimated_portfolio_return: number; estimated_drawdown: number }
+
+type PortfolioPosition = {
+  symbol: string
+  weight: number
+  sector: string | null
+  industry?: string | null
+  companyName?: string | null
+  pe?: number | null
+}
+
 type PortfolioDetail = {
   portfolio: {
     id: string
@@ -28,17 +38,22 @@ type PortfolioDetail = {
     createdAt?: string
     updatedAt?: string
   }
-  positions: { symbol: string; weight: number; sector: string | null }[]
+  positions: PortfolioPosition[]
 }
 
 function formatDate(value?: string) {
-  if (!value) return '—'
+  if (!value) return '--'
   const date = new Date(value)
   return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
 }
 
 function formatObjective(value: string) {
   return value.replace(/_/g, ' ')
+}
+
+function formatPe(value?: number | null) {
+  if (value == null || Number.isNaN(value)) return '--'
+  return `${value.toFixed(1)}x`
 }
 
 export default function PortfolioDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -79,6 +94,7 @@ export default function PortfolioDetailPage({ params }: { params: Promise<{ id: 
       setLoading(false)
     }
   }
+
   async function saveMetadata() {
     if (!portfolioId) return
     setSaving(true)
@@ -132,6 +148,13 @@ export default function PortfolioDetailPage({ params }: { params: Promise<{ id: 
   }
 
   const stressEntries = Object.entries(detail?.portfolio.stressTestResults ?? {})
+  const topPosition = detail?.positions?.[0] ?? null
+  const sectorCount = new Set((detail?.positions ?? []).map((position) => position.sector ?? position.symbol)).size
+  const weightedPe = detail?.positions?.reduce((sum, position) => {
+    const pe = typeof position.pe === 'number' ? position.pe : 0
+    return sum + pe * position.weight
+  }, 0) ?? 0
+  const hasPeSnapshot = (detail?.positions ?? []).some((position) => typeof position.pe === 'number')
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, width: '100%', fontFamily: "'DM Sans', sans-serif" }}>
@@ -140,7 +163,7 @@ export default function PortfolioDetailPage({ params }: { params: Promise<{ id: 
           <div style={{ fontSize: 10.5, color: 'var(--gold)', letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 10 }}>Portfolio</div>
           <h1 className="font-display" style={{ fontSize: 32, fontWeight: 500, letterSpacing: '-0.02em', marginBottom: 8 }}>{detail?.portfolio.name ?? 'Portfolio detail'}</h1>
           <p style={{ fontSize: 13.5, color: 'var(--text-muted)', lineHeight: 1.65, maxWidth: 860 }}>
-            Review the saved allocation, stress diagnostics, and update the notes and metadata attached to this profile portfolio.
+            Review the saved allocation, holdings mix, valuation snapshots, and portfolio diagnostics linked to this saved profile.
           </p>
         </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
@@ -176,12 +199,34 @@ export default function PortfolioDetailPage({ params }: { params: Promise<{ id: 
 
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.35fr) minmax(340px, 0.65fr)', gap: 20, alignItems: 'start' }}>
             <div className="card" style={{ padding: '22px 24px' }}>
-              <div style={{ fontSize: 10.5, color: 'var(--text-muted)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 16 }}>Holdings</div>
+              <div style={{ display: 'grid', gap: 14, marginBottom: 18 }}>
+                <div style={{ fontSize: 10.5, color: 'var(--text-muted)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Holdings</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10 }}>
+                  <div style={{ border: '1px solid var(--border)', background: 'var(--bg-elevated)', borderRadius: 12, padding: '12px 14px' }}>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Largest position</div>
+                    <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--gold)' }}>{topPosition?.symbol ?? '--'}</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>{topPosition ? formatPercent(topPosition.weight) : '--'}</div>
+                  </div>
+                  <div style={{ border: '1px solid var(--border)', background: 'var(--bg-elevated)', borderRadius: 12, padding: '12px 14px' }}>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Sector count</div>
+                    <div style={{ fontSize: 16, fontWeight: 600 }}>{sectorCount}</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>Diversification view</div>
+                  </div>
+                  <div style={{ border: '1px solid var(--border)', background: 'var(--bg-elevated)', borderRadius: 12, padding: '12px 14px' }}>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Weighted P/E</div>
+                    <div style={{ fontSize: 16, fontWeight: 600 }}>{hasPeSnapshot ? formatPe(weightedPe) : '--'}</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>Saved valuation snapshot</div>
+                  </div>
+                </div>
+              </div>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--border)' }}>
                     <th style={{ textAlign: 'left', fontSize: 11, color: 'var(--text-muted)', padding: '0 8px 10px 0' }}>Symbol</th>
+                    <th style={{ textAlign: 'left', fontSize: 11, color: 'var(--text-muted)', padding: '0 8px 10px 0' }}>Company</th>
+                    <th style={{ textAlign: 'left', fontSize: 11, color: 'var(--text-muted)', padding: '0 8px 10px 0' }}>Industry</th>
                     <th style={{ textAlign: 'left', fontSize: 11, color: 'var(--text-muted)', padding: '0 8px 10px 0' }}>Sector</th>
+                    <th style={{ textAlign: 'right', fontSize: 11, color: 'var(--text-muted)', padding: '0 8px 10px 0' }}>P/E</th>
                     <th style={{ textAlign: 'right', fontSize: 11, color: 'var(--text-muted)', padding: '0 0 10px 0' }}>Weight</th>
                   </tr>
                 </thead>
@@ -189,7 +234,10 @@ export default function PortfolioDetailPage({ params }: { params: Promise<{ id: 
                   {detail.positions.map((position) => (
                     <tr key={position.symbol} style={{ borderBottom: '1px solid var(--border)' }}>
                       <td style={{ padding: '12px 8px 12px 0', fontWeight: 600, color: 'var(--gold)' }}>{position.symbol}</td>
-                      <td style={{ padding: '12px 8px 12px 0', color: 'var(--text-muted)' }}>{position.sector ?? '—'}</td>
+                      <td style={{ padding: '12px 8px 12px 0', color: 'var(--text-primary)' }}>{position.companyName ?? position.symbol}</td>
+                      <td style={{ padding: '12px 8px 12px 0', color: 'var(--text-muted)' }}>{position.industry ?? '--'}</td>
+                      <td style={{ padding: '12px 8px 12px 0', color: 'var(--text-muted)' }}>{position.sector ?? '--'}</td>
+                      <td style={{ textAlign: 'right', padding: '12px 8px 12px 0', fontVariantNumeric: 'tabular-nums', color: 'var(--text-secondary)' }}>{formatPe(position.pe)}</td>
                       <td style={{ textAlign: 'right', padding: '12px 0', fontVariantNumeric: 'tabular-nums' }}>{formatPercent(position.weight)}</td>
                     </tr>
                   ))}

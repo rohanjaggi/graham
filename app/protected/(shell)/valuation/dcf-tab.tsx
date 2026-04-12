@@ -58,7 +58,7 @@ function NumInput({
   min,
   max,
   step = 0.1,
-  placeholder = '—',
+  placeholder = '--',
 }: {
   label: string
   value: number | null
@@ -172,7 +172,7 @@ function ResultsPanel({
       {/* Negative equity warning */}
       {result.equityValue < 0 && (
         <div style={{ padding: '10px 14px', borderRadius: 8, background: 'rgba(240,96,112,0.1)', border: '1px solid rgba(240,96,112,0.3)', fontSize: 12, color: '#F06070' }}>
-          Negative equity — model may not apply to this company at these assumptions.
+          Negative equity -- model may not apply to this company at these assumptions.
         </div>
       )}
 
@@ -187,7 +187,7 @@ function ResultsPanel({
             <div style={{ fontSize: 10.5, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6 }}>vs Market Price</div>
             <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>{fmtPrice(currentPrice)}</div>
             <div style={{ fontSize: 16, fontWeight: 700, color: isUndervalued ? '#3DD68C' : '#F06070' }}>
-              {isUndervalued ? '▲' : '▼'} {Math.abs(diff).toFixed(1)}% {isUndervalued ? 'upside' : 'downside'}
+              {isUndervalued ? '+' : '-'} {Math.abs(diff).toFixed(1)}% {isUndervalued ? 'upside' : 'downside'}
             </div>
           </div>
         )}
@@ -233,12 +233,12 @@ function ScenarioComparison({
                   </div>
                   {diff != null && (
                     <div style={{ fontSize: 12, fontWeight: 500, color: diff >= 0 ? '#3DD68C' : '#F06070' }}>
-                      {diff >= 0 ? '▲' : '▼'} {Math.abs(diff).toFixed(1)}%
+                      {diff >= 0 ? '+' : '-'} {Math.abs(diff).toFixed(1)}%
                     </div>
                   )}
                 </>
               ) : (
-                <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>—</div>
+                <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>--</div>
               )}
             </div>
           )
@@ -348,7 +348,7 @@ export function DCFTab({ symbol, currentPrice: priceFromParent, onSave }: {
     return null
   }, [wacc, terminalGrowthRate])
 
-  // DCF results — recalculate live whenever any input changes
+  // DCF results -- recalculate live whenever any input changes
   const commonArgs = useMemo(() => ({
     baseFCF: baseFCF ?? 0,
     terminalGrowthRate: terminalGrowthRate / 100,
@@ -383,7 +383,7 @@ export function DCFTab({ symbol, currentPrice: priceFromParent, onSave }: {
   if (loading) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '64px 0', color: 'var(--text-muted)', fontSize: 13 }}>
-        Loading DCF data…
+        Loading DCF data...
       </div>
     )
   }
@@ -529,7 +529,7 @@ export function DCFTab({ symbol, currentPrice: priceFromParent, onSave }: {
             Shares: {apiData.sharesOutstanding.toFixed(1)}M · Net Debt: {fmtM(apiData.netDebt)}
             {apiData.baseFCF == null && (
               <span style={{ color: '#F06070', display: 'block', marginTop: 4 }}>
-                FCF not available from Finnhub — please enter manually.
+                FCF not available from Finnhub -- please enter manually.
               </span>
             )}
           </div>
@@ -562,9 +562,9 @@ export function DCFTab({ symbol, currentPrice: priceFromParent, onSave }: {
                           : 'var(--gold)',
               }}
             >
-              {saveStatus === 'saving' ? 'Saving…'
-                : saveStatus === 'saved' ? '✓ Snapshot saved'
-                : saveStatus === 'error' ? 'Save failed — retry'
+              {saveStatus === 'saving' ? 'Saving...'
+                : saveStatus === 'saved' ? 'Saved: Snapshot saved'
+                : saveStatus === 'error' ? 'Save failed -- retry'
                 : 'Save Snapshot'}
             </button>
           </div>
@@ -573,3 +573,4 @@ export function DCFTab({ symbol, currentPrice: priceFromParent, onSave }: {
     </div>
   )
 }
+

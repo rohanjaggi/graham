@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
@@ -20,12 +20,12 @@ type PopularResponse = {
 }
 
 function formatPrice(price: number | null): string {
-  if (price === null || Number.isNaN(price)) return '—'
+  if (price === null || Number.isNaN(price)) return '--'
   return `$${price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
 function formatMove(changePct: number | null): string {
-  if (changePct === null || Number.isNaN(changePct)) return '—'
+  if (changePct === null || Number.isNaN(changePct)) return '--'
   return `${changePct >= 0 ? '+' : ''}${changePct.toFixed(2)}%`
 }
 
@@ -76,7 +76,7 @@ export default function ExplorePage() {
 
   const subtitle = useMemo(() => {
     if (source === 'finnhub-news-mentions') {
-      return 'Ranked by symbol mention frequency in today\'s Finnhub market news stream.'
+      return "Ranked by symbol mention frequency in today's Finnhub market news stream."
     }
     return 'Showing a fallback watchlist while live popularity data is unavailable.'
   }, [source])
@@ -98,7 +98,7 @@ export default function ExplorePage() {
           </div>
 
           <Link href="/protected/research" className="btn-ghost" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-            ← Back to Research
+            {'<-'} Back to Research
           </Link>
         </div>
 

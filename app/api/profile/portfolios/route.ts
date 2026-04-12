@@ -5,9 +5,40 @@ import {
   SIMPLE_MODE_PRESETS,
   type RiskTolerance,
 } from '@/lib/portfolio/simpleMode'
+import { fetchMergedCompanySnapshot } from '@/lib/market/companySnapshot'
 import { createClient } from '@/lib/supabase/server'
 
 type PortfolioRow = Record<string, unknown>
+
+const PORTFOLIO_LIST_CACHE_TTL_MS = 30 * 1000
+
+type PortfolioListResponse = {
+  portfolios: Array<{
+    id: unknown
+    name: unknown
+    objective: unknown
+    investmentHorizonBucket: unknown
+    riskTolerance: unknown
+    universeFilter: unknown
+    lookbackPeriodYears: number
+    expectedAnnualReturn: number
+    expectedAnnualVolatility: number
+    sharpeRatio: number
+    maxDrawdown: number
+    worstMonthReturn: number
+    worstQuarterReturn: number
+    riskFreeRateUsed: number
+    createdAt: unknown
+    updatedAt: unknown
+  }>
+}
+
+declare global {
+  var __grahamPortfolioListCache: Map<string, { data: PortfolioListResponse; expiresAt: number }> | undefined
+}
+
+const portfolioListCache = globalThis.__grahamPortfolioListCache ?? new Map<string, { data: PortfolioListResponse; expiresAt: number }>()
+globalThis.__grahamPortfolioListCache = portfolioListCache
 
 const OptimizeRequestSchema = z.object({
   objective: z.enum(['max_sharpe', 'max_sortino', 'max_return', 'min_volatility', 'min_max_drawdown']).optional(),
@@ -44,27 +75,44 @@ const CreateBodySchema = z.object({
   optimizeResult: OptimizeResultSchema,
 })
 
-async function fetchSectorBySymbol(symbols: string[]): Promise<Record<string, string | null>> {
+type PositionSnapshot = {
+  companyName: string | null
+  industry: string | null
+  sector: string | null
+  pe: number | null
+  marketValue: number | null
+}
+
+function derivePeFromSnapshot(snapshot: Awaited<ReturnType<typeof fetchMergedCompanySnapshot>>): number | null {
+  return typeof snapshot?.metrics?.peNormalizedAnnual === 'number' ? snapshot.metrics.peNormalizedAnnual
+    : typeof snapshot?.metrics?.peTTM === 'number' ? snapshot.metrics.peTTM
+    : typeof snapshot?.metrics?.peBasicExclExtraTTM === 'number' ? snapshot.metrics.peBasicExclExtraTTM
+    : null
+}
+
+async function fetchPositionSnapshots(symbols: string[]): Promise<Record<string, PositionSnapshot>> {
   const apiKey = process.env.FINNHUB_API_KEY
   if (!apiKey) return {}
 
   const entries = await Promise.all(
     symbols.map(async (symbol) => {
       try {
-        const response = await fetch(
-          `https://finnhub.io/api/v1/stock/profile2?symbol=${encodeURIComponent(symbol)}&token=${apiKey}`,
-          { next: { revalidate: 3600 } }
-        )
-        if (!response.ok) return [symbol, null] as const
-
-        const profile = await response.json()
-        const sector = typeof profile?.finnhubIndustry === 'string' && profile.finnhubIndustry.trim()
-          ? profile.finnhubIndustry.trim()
-          : null
-
-        return [symbol, sector] as const
+        const snapshot = await fetchMergedCompanySnapshot(symbol, apiKey)
+        return [
+          symbol,
+          {
+            companyName: snapshot?.name ?? null,
+            industry: snapshot?.industry ?? null,
+            sector: snapshot?.sector ?? null,
+            pe: derivePeFromSnapshot(snapshot),
+            marketValue: null,
+          },
+        ] as const
       } catch {
-        return [symbol, null] as const
+        return [
+          symbol,
+          { companyName: null, industry: null, sector: null, pe: null, marketValue: null },
+        ] as const
       }
     })
   )
@@ -80,11 +128,17 @@ export async function GET() {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
   }
 
+  const cacheKey = authData.user.id
+  const cached = portfolioListCache.get(cacheKey)
+  if (cached && cached.expiresAt > Date.now()) {
+    return NextResponse.json(cached.data)
+  }
+
   const { data, error } = await supabase
     .from('user_portfolios')
     .select('*')
     .eq('user_id', authData.user.id)
-    .order('created_at', { ascending: false })
+    .order('updated_at', { ascending: false })
 
   if (error) {
     console.error('Error fetching portfolios', error)
@@ -110,7 +164,13 @@ export async function GET() {
     updatedAt: row.updated_at,
   }))
 
-  return NextResponse.json({ portfolios })
+  const response = { portfolios }
+  portfolioListCache.set(cacheKey, {
+    data: response,
+    expiresAt: Date.now() + PORTFOLIO_LIST_CACHE_TTL_MS,
+  })
+
+  return NextResponse.json(response)
 }
 
 export async function POST(req: NextRequest) {
@@ -149,7 +209,7 @@ export async function POST(req: NextRequest) {
     symbol,
     weight: weight / weightSum,
   }))
-  const sectorBySymbol = await fetchSectorBySymbol(normalizedWeights.map((entry) => entry.symbol))
+  const snapshotsBySymbol = await fetchPositionSnapshots(normalizedWeights.map((entry) => entry.symbol))
   const riskTolerance = (optimizeRequest?.risk_tolerance ?? 'MODERATE') as RiskTolerance
   const simplePreset = optimizeRequest?.simple_mode === true ? SIMPLE_MODE_PRESETS[riskTolerance] : null
 
@@ -194,7 +254,11 @@ export async function POST(req: NextRequest) {
     portfolio_id: inserted.id,
     symbol,
     weight,
-    sector: sectorBySymbol[symbol] ?? null,
+    sector: snapshotsBySymbol[symbol]?.sector ?? null,
+    industry: snapshotsBySymbol[symbol]?.industry ?? null,
+    company_name: snapshotsBySymbol[symbol]?.companyName ?? null,
+    pe_snapshot: snapshotsBySymbol[symbol]?.pe ?? null,
+    market_value_snapshot: snapshotsBySymbol[symbol]?.marketValue ?? null,
   }))
 
   const { error: positionsError } = await supabase
@@ -209,6 +273,8 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     )
   }
+
+  portfolioListCache.delete(authData.user.id)
 
   return NextResponse.json({ id: inserted.id }, { status: 201 })
 }

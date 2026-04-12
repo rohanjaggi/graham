@@ -17,6 +17,15 @@ type RecentSearchItem = {
   updatedAt: string
 }
 
+const RECENT_SEARCH_CACHE_TTL_MS = 30 * 1000
+
+declare global {
+  var __grahamRecentSearchCache: Map<string, { data: RecentSearchItem[]; expiresAt: number }> | undefined
+}
+
+const recentSearchCache = globalThis.__grahamRecentSearchCache ?? new Map<string, { data: RecentSearchItem[]; expiresAt: number }>()
+globalThis.__grahamRecentSearchCache = recentSearchCache
+
 function normalizeRecentSearches(userMetadata: unknown): RecentSearchItem[] {
   if (!userMetadata || typeof userMetadata !== 'object') return []
 
@@ -65,10 +74,21 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid scope.' }, { status: 400 })
   }
 
+  const cacheKey = `${user.id}:${scopeResult.data}`
+  const cached = recentSearchCache.get(cacheKey)
+  if (cached && cached.expiresAt > Date.now()) {
+    return NextResponse.json({ searches: cached.data })
+  }
+
   const items = normalizeRecentSearches(user.user_metadata)
     .filter((item) => item.scope === scopeResult.data)
     .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
     .slice(0, 8)
+
+  recentSearchCache.set(cacheKey, {
+    data: items,
+    expiresAt: Date.now() + RECENT_SEARCH_CACHE_TTL_MS,
+  })
 
   return NextResponse.json({ searches: items })
 }
@@ -114,6 +134,9 @@ export async function POST(request: NextRequest) {
   if (updateError) {
     return NextResponse.json({ error: 'Unable to save recent search.' }, { status: 500 })
   }
+
+  recentSearchCache.delete(`${user.id}:valuation`)
+  recentSearchCache.delete(`${user.id}:research`)
 
   return NextResponse.json({ ok: true })
 }

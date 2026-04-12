@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { UNIVERSE } from '@/lib/screener/universe'
 import { createClient } from '@/lib/supabase/server'
 
@@ -60,7 +60,7 @@ export type ScreenerFilters = {
 const FINNHUB_KEY = process.env.FINNHUB_API_KEY!
 const BASE = 'https://finnhub.io/api/v1'
 
-// In-memory cache — survives across requests on same server instance
+// In-memory cache â€” survives across requests on same server instance
 let rowsCache: { rows: ScreenerRow[]; fetchedAt: number } | null = null
 const CACHE_TTL_MS = 60 * 60 * 1000
 
@@ -90,8 +90,8 @@ async function fetchSymbol(symbol: string): Promise<ScreenerRow | null> {
     return {
       symbol,
       name: p?.name ?? symbol,
-      sector: p?.finnhubIndustry ?? '—',
-      industry: p?.finnhubIndustry ?? '—',
+      sector: p?.finnhubIndustry ?? '--',
+      industry: p?.finnhubIndustry ?? '--',
       price,
       marketCap: marketCapRaw != null ? marketCapRaw * 1e6 : null,
       pe: numOrNull(m?.peNormalizedAnnual ?? m?.peTTM),
@@ -163,7 +163,7 @@ function passes(f: ScreenerFilters, r: ScreenerRow): boolean {
   if (!atMost(r.pctFrom52wHigh,  f.pctFrom52wHighMax)) return false
   if (f.marketCapMinB != null && r.marketCap != null && r.marketCap < f.marketCapMinB * 1e9) return false
   if (f.sharesDeclineYoy && r.sharesChangeYoy != null && r.sharesChangeYoy > 0) return false
-  if (f.sector && r.sector !== '—' && r.sector !== f.sector) return false
+  if (f.sector && r.sector !== '--' && r.sector !== f.sector) return false
   return true
 }
 
@@ -190,3 +190,5 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const offset = Math.max(0, filters.offset ?? 0)
   return NextResponse.json({ rows: filtered.slice(offset, offset + 100), total: filtered.length, offset })
 }
+
+
