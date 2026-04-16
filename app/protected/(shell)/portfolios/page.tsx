@@ -89,7 +89,7 @@ export default function PortfoliosPage() {
             Browse every portfolio you have saved, compare the headline risk and return profile, and open any portfolio for a deeper review.
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <label style={{ display: 'grid', gap: 6 }}>
             <span style={{ fontSize: 10.5, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Sort by</span>
             <select

@@ -434,7 +434,7 @@ export default function TailRiskPage() {
             Compare saved portfolios by downside metrics, inspect stress scenarios, and review sector concentration for the selected allocation.
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <label style={{ display: 'grid', gap: 6 }}>
             <span style={{ fontSize: 10.5, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Sort by</span>
             <select
