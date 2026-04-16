@@ -32,6 +32,7 @@ export async function updateSession(request: NextRequest) {
 
   const path = request.nextUrl.pathname
   const isAuthPage = path.startsWith('/auth')
+  const isResetPassword = path.startsWith('/auth/reset-password')
   const isOnboarding = path.startsWith('/onboarding')
   const isProtected = path.startsWith('/protected')
 
@@ -39,7 +40,7 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(new URL('/auth', request.url))
   }
 
-  if (user && isAuthPage) {
+  if (user && isAuthPage && !isResetPassword) {
     return NextResponse.redirect(new URL('/protected', request.url))
   }
 

@@ -23,7 +23,7 @@ export default function AuthPage() {
   const router = useRouter()
   const supabase = createClient()
 
-  const [mode, setMode] = useState<'login' | 'signup'>('login')
+  const [mode, setMode] = useState<'login' | 'signup' | 'forgot'>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
@@ -31,6 +31,7 @@ export default function AuthPage() {
   const [googleLoading, setGoogleLoading] = useState(false)
   const [error, setError] = useState('')
   const [awaitingConfirmation, setAwaitingConfirmation] = useState(false)
+  const [resetEmailSent, setResetEmailSent] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -59,6 +60,18 @@ export default function AuthPage() {
       window.location.href = profileComplete ? '/protected' : '/onboarding'
     }
 
+    setLoading(false)
+  }
+
+  async function handleForgotPassword(e: React.FormEvent) {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/auth/callback?next=/auth/reset-password`,
+    })
+    if (error) { setError(error.message); setLoading(false); return }
+    setResetEmailSent(true)
     setLoading(false)
   }
 
@@ -110,6 +123,77 @@ export default function AuthPage() {
         {/* Card */}
         <div className="card" style={{ padding: '36px 32px' }}>
 
+          {/* ── Reset email sent screen ── */}
+          {resetEmailSent && (
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 36, marginBottom: 20 }}>✉️</div>
+              <div className="font-display" style={{ fontSize: 22, fontWeight: 500, marginBottom: 10 }}>
+                Check your inbox.
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.7, marginBottom: 24 }}>
+                We sent a password reset link to<br />
+                <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{email}</span>
+              </div>
+              <div style={{ fontSize: 12.5, color: 'var(--text-muted)', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 8, padding: '12px 16px', lineHeight: 1.6, marginBottom: 24 }}>
+                Click the link in the email to set a new password.
+              </div>
+              <button
+                className="btn-ghost"
+                style={{ width: '100%', padding: '11px' }}
+                onClick={() => { setResetEmailSent(false); setMode('login'); setEmail('') }}
+              >
+                Back to Sign In
+              </button>
+            </div>
+          )}
+
+          {/* ── Forgot password form ── */}
+          {!resetEmailSent && !awaitingConfirmation && mode === 'forgot' && (
+            <div>
+              <button
+                onClick={() => { setMode('login'); setError('') }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 12.5, padding: 0, marginBottom: 24, display: 'flex', alignItems: 'center', gap: 6, fontFamily: "'DM Sans', sans-serif" }}
+              >
+                ← Back to Sign In
+              </button>
+              <div className="font-display" style={{ fontSize: 22, fontWeight: 500, marginBottom: 6 }}>
+                Reset your password.
+              </div>
+              <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 24 }}>
+                Enter your email and we'll send you a reset link.
+              </div>
+              <form onSubmit={handleForgotPassword} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div>
+                  <label style={{ fontSize: 11.5, color: 'var(--text-muted)', letterSpacing: '0.05em', display: 'block', marginBottom: 6 }}>
+                    EMAIL ADDRESS
+                  </label>
+                  <input
+                    className="input-dark"
+                    type="email"
+                    placeholder="you@example.com"
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    required
+                    autoComplete="email"
+                  />
+                </div>
+                {error && (
+                  <div style={{ fontSize: 12.5, color: 'var(--red)', background: 'var(--red-dim)', padding: '10px 14px', borderRadius: 6 }}>
+                    {error}
+                  </div>
+                )}
+                <button
+                  className="btn-gold"
+                  type="submit"
+                  disabled={loading}
+                  style={{ width: '100%', padding: '12px', fontSize: 14, marginTop: 4, opacity: loading ? 0.7 : 1 }}
+                >
+                  {loading ? 'Sending…' : 'Send Reset Link →'}
+                </button>
+              </form>
+            </div>
+          )}
+
           {/* ── Email confirmation screen ── */}
           {awaitingConfirmation && (
             <div style={{ textAlign: 'center' }}>
@@ -135,7 +219,7 @@ export default function AuthPage() {
           )}
 
           {/* ── Normal auth form ── */}
-          {!awaitingConfirmation && (<>
+          {!awaitingConfirmation && !resetEmailSent && mode !== 'forgot' && (<>
           {/* Tab toggle */}
           <div className="tab-bar" style={{ marginBottom: 28 }}>
             <button
@@ -211,9 +295,20 @@ export default function AuthPage() {
             </div>
 
             <div>
-              <label style={{ fontSize: 11.5, color: 'var(--text-muted)', letterSpacing: '0.05em', display: 'block', marginBottom: 6 }}>
-                PASSWORD
-              </label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+                <label style={{ fontSize: 11.5, color: 'var(--text-muted)', letterSpacing: '0.05em' }}>
+                  PASSWORD
+                </label>
+                {mode === 'login' && (
+                  <button
+                    type="button"
+                    onClick={() => { setMode('forgot'); setError('') }}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11.5, color: 'var(--gold)', fontFamily: "'DM Sans', sans-serif", padding: 0 }}
+                  >
+                    Forgot password?
+                  </button>
+                )}
+              </div>
               <input
                 className="input-dark"
                 type="password"
