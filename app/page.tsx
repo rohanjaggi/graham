@@ -132,12 +132,14 @@ export default function Landing() {
       {/* ── NAV ── */}
       <nav style={{
         position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100,
-        height: 60, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        height: 60,
         padding: '0 56px',
         borderBottom: '1px solid var(--border)',
         background: 'rgba(7,12,21,0.88)',
         backdropFilter: 'blur(20px)',
+        display: 'flex', alignItems: 'center',
       }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', maxWidth: 1280, margin: '0 auto', width: '100%' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <img src="/images/graham-logo.png" alt="Graham" style={{ width: 72, height: 72, objectFit: 'contain', filter: 'invert(1) sepia(1) saturate(2) hue-rotate(5deg) brightness(0.85)', flexShrink: 0 }} />
           <div className="font-display text-gold-gradient" style={{ fontSize: 29, fontWeight: 500, letterSpacing: '-0.01em', lineHeight: 1 }}>Graham</div>
@@ -164,6 +166,7 @@ export default function Landing() {
         <Link href="/protected">
           <button className="btn-gold" style={{ padding: '8px 22px', fontSize: 13 }}>Enter App →</button>
         </Link>
+        </div>
       </nav>
 
       {/* ── HERO ── */}
@@ -171,7 +174,8 @@ export default function Landing() {
         <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', backgroundImage: 'radial-gradient(circle, rgba(200,169,110,0.12) 1px, transparent 1px)', backgroundSize: '38px 38px', opacity: 0.7 }} />
         <div style={{ position: 'absolute', top: '15%', left: '20%', width: 700, height: 600, background: 'radial-gradient(ellipse, rgba(200,169,110,0.07) 0%, transparent 65%)', pointerEvents: 'none' }} />
 
-        <div style={{ flex: 1, maxWidth: 620, position: 'relative', zIndex: 1 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', maxWidth: 1280, margin: '0 auto', width: '100%', position: 'relative', zIndex: 1 }}>
+        <div style={{ flex: 1, maxWidth: 620 }}>
           <div className="badge-neutral animate-fade-in" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginBottom: 32, fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
             <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--green)', display: 'inline-block', boxShadow: '0 0 6px var(--green)' }} />
             Built for long-term investors
@@ -186,17 +190,25 @@ export default function Landing() {
             <Link href="/protected"><button className="btn-gold animate-pulse-gold" style={{ padding: '13px 32px', fontSize: 14 }}>Open Graham ↗</button></Link>
             <button className="btn-ghost" style={{ padding: '13px 28px', fontSize: 14 }} onClick={() => scrollTo('features')}>Explore Features ↓</button>
           </div>
-          <div className="animate-fade-up d5" style={{ display: 'flex', gap: 44, paddingTop: 32, borderTop: '1px solid var(--border)' }}>
-            {[{ val: '$301k', label: 'Demo AUM' }, { val: '1.42', label: 'Sharpe Ratio' }, { val: '−14.2%', label: 'Max Drawdown' }, { val: '6', label: 'Instruments' }].map(s => (
-              <div key={s.label}>
-                <div className="font-display" style={{ fontSize: 26, fontWeight: 500, color: 'var(--gold)', letterSpacing: '-0.02em' }}>{s.val}</div>
-                <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.09em', textTransform: 'uppercase', marginTop: 4 }}>{s.label}</div>
+          <div className="animate-fade-up d5" style={{ display: 'flex', alignItems: 'center', gap: 0, paddingTop: 28, borderTop: '1px solid var(--border)' }}>
+            {([
+              { icon: '⊞', label: 'DCF Valuation' },
+              { icon: '◎', label: 'Portfolio Optimiser' },
+              { icon: '△', label: 'Technical Analysis' },
+              { icon: '◐', label: 'Tail Risk' },
+            ] as { icon: string; label: string }[]).map((f, i) => (
+              <div key={f.label} style={{ display: 'flex', alignItems: 'center' }}>
+                {i > 0 && <div style={{ width: 1, height: 28, background: 'var(--border)', margin: '0 20px' }} />}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 13, color: 'var(--gold)', opacity: 0.75 }}>{f.icon}</span>
+                  <span style={{ fontSize: 12, color: 'var(--text-muted)', letterSpacing: '0.05em' }}>{f.label}</span>
+                </div>
               </div>
             ))}
           </div>
         </div>
 
-        <div className="animate-fade-up d2" style={{ position: 'relative', width: 460, flexShrink: 0, marginLeft: 60 }}>
+        <div className="animate-fade-up d2" style={{ position: 'relative', width: 460, flexShrink: 0, marginLeft: 80, marginTop: 48 }}>
           <div className="card glow-gold" style={{ padding: '26px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
               <div>
@@ -238,10 +250,12 @@ export default function Landing() {
             </div>
           </div>
         </div>
+        </div>
       </section>
 
       {/* ── FEATURES ── */}
       <section id="features" style={{ padding: '100px 56px', borderTop: '1px solid var(--border)' }}>
+        <div style={{ maxWidth: 1280, margin: '0 auto' }}>
         <div style={{ marginBottom: 60 }}>
           <div style={{ fontSize: 10.5, color: 'var(--gold)', letterSpacing: '0.16em', textTransform: 'uppercase', marginBottom: 16 }}>Platform</div>
           <h2 className="font-display" style={{ fontSize: 54, fontWeight: 500, letterSpacing: '-0.025em', lineHeight: 1, maxWidth: 480 }}>Six instruments.<br />One discipline.</h2>
@@ -256,6 +270,7 @@ export default function Landing() {
               <div style={{ fontSize: 12.5, color: 'var(--text-muted)', lineHeight: 1.75 }}>{f.desc}</div>
             </div>
           ))}
+        </div>
         </div>
       </section>
 
@@ -410,7 +425,8 @@ export default function Landing() {
       </section>
 
       {/* ── FOOTER ── */}
-      <footer style={{ padding: '28px 56px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <footer style={{ padding: '28px 56px', borderTop: '1px solid var(--border)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', maxWidth: 1280, margin: '0 auto' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <img src="/images/graham-logo.png" alt="Graham" style={{ width: 28, height: 28, objectFit: 'contain', filter: 'invert(1) sepia(1) saturate(2) hue-rotate(5deg) brightness(0.85)' }} />
@@ -421,6 +437,7 @@ export default function Landing() {
         <div style={{ fontSize: 11.5, color: 'var(--text-muted)', textAlign: 'right' }}>
           <div>IS4228 · Spring 2025</div>
           <div style={{ marginTop: 3, opacity: 0.55 }}>Mock data only · Not financial advice</div>
+        </div>
         </div>
       </footer>
 
