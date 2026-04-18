@@ -12,17 +12,18 @@ A long-term equity intelligence platform built for IS4228. Graham brings togethe
 | **Valuation** | DCF model with adjustable WACC, growth, and terminal assumptions; comparables tab with peer benchmarking |
 | **Portfolio Optimiser** | Mean-variance optimisation (max Sharpe, min vol, max return); save and version portfolios |
 | **Portfolios** | Saved portfolio library with per-portfolio detail pages |
-| **Tail Risk** | Maximum drawdown, historical stress scenarios, and expected shortfall metrics |
+| **Tail Risk** | Maximum drawdown, historical stress scenarios (COVID, GFC), VaR, and CVaR metrics |
 | **Stock Page** | Per-ticker deep-dive: price chart, key metrics, financials, news, AI analysis, and crisis heuristics |
 
 ## Tech Stack
 
-- **Framework** — Next.js 15 (App Router)
+- **Framework** — Next.js 16 (App Router), React 19
 - **Auth & DB** — Supabase (Postgres + Auth)
-- **Market Data** — Finnhub
+- **Market Data** — Finnhub (quotes, news, financials), Yahoo Finance (historical prices)
 - **AI** — OpenAI (qualitative research, company analysis)
 - **SEC Filings** — EDGAR API
-- **Styling** — CSS variables, custom dark theme
+- **Styling** — Tailwind CSS v4, CSS variables, custom dark theme
+- **Testing** — Vitest
 
 ## Getting Started
 
@@ -60,13 +61,19 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ```
 app/
-  api/                    # Route handlers (ticker, portfolio, screener, etc.)
+  api/                    # Route handlers (ticker, portfolio, screener, dcf-snapshots…)
+  auth/                   # Sign in / sign up pages
+  onboarding/             # Profile setup after signup
   protected/
     (shell)/              # Main app pages (overview, research, screener, valuation…)
     ticker/[symbol]/      # Per-ticker deep-dive page
 lib/
+  dcf.ts                  # DCF valuation logic
   market/                 # Market data helpers
-  portfolio/              # Optimisation logic
+  portfolio/              # Optimisation logic, covariance, stress tests, Yahoo Finance
   sec/                    # EDGAR integration
+  supabase/               # Supabase client/server setup
   ui/                     # Shared formatting utilities
+supabase/
+  migrations/             # SQL schema migrations
 ```
